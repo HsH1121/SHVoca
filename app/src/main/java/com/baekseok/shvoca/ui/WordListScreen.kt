@@ -10,6 +10,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -83,18 +86,13 @@ fun WordListScreen(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                "<",
-                color = Ink,
-                fontSize = 28.sp,
-                fontWeight = FontWeight.Light,
-                modifier = Modifier
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null
-                    ) { onBack() }
-            )
-            Spacer(Modifier.width(12.dp))
+            IconButton(onClick = onBack) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "뒤로",
+                    tint = Ink
+                )
+            }
             Text(
                 "단어 목록",
                 color = Ink,
@@ -103,17 +101,13 @@ fun WordListScreen(
                 modifier = Modifier.weight(1f)
             )
             if (book != null) {
-                Text(
-                    "+",
-                    color = Ink,
-                    fontSize = 28.sp,
-                    fontWeight = FontWeight.Light,
-                    modifier = Modifier
-                        .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null
-                        ) { showAddDialog = true }
-                )
+                IconButton(onClick = { showAddDialog = true }) {
+                    Icon(
+                        imageVector = Icons.Default.Add,
+                        contentDescription = "단어 추가",
+                        tint = Ink
+                    )
+                }
             }
         }
         Spacer(Modifier.height(6.dp))

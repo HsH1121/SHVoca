@@ -54,6 +54,7 @@ dependencies {
     implementation(libs.androidx.ui.graphics)
     implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material3)
+    implementation(libs.androidx.material.icons.core)
 
     // 디버그 빌드에서만 미리보기 도구 포함
     debugImplementation(libs.androidx.ui.tooling)

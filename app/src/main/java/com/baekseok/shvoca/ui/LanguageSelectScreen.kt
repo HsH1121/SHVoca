@@ -9,6 +9,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -67,17 +69,13 @@ fun LanguageSelectScreen(onLanguageSelected: (String) -> Unit) {
                 fontWeight = FontWeight.ExtraBold,
                 modifier = Modifier.weight(1f)
             )
-            Text(
-                "+",
-                color = Ink,
-                fontSize = 28.sp,
-                fontWeight = FontWeight.Light,
-                modifier = Modifier
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null
-                    ) { showAddDialog = true }
-            )
+            IconButton(onClick = { showAddDialog = true }) {
+                Icon(
+                    imageVector = Icons.Default.Add,
+                    contentDescription = "단어장 추가",
+                    tint = Ink
+                )
+            }
         }
         Spacer(Modifier.height(6.dp))
         Text("학습할 단어장을 선택하세요.", color = Muted, fontSize = 13.sp)
