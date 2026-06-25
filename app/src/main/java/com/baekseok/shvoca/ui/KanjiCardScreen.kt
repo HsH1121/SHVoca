@@ -1,8 +1,12 @@
 package com.baekseok.shvoca.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -57,6 +61,7 @@ fun KanjiCardScreen(language: String, startIndex: Int = 0, shuffled: Boolean = f
     var flipped by rememberSaveable { mutableStateOf(false) }
     var backPos by remember { mutableStateOf(pos) }
     var pendingFlip by remember { mutableStateOf(false) }
+    var moveDirection by remember { mutableStateOf(1) }
 
     LaunchedEffect(baseWords.size) {
         if (baseWords.isNotEmpty() && indexOrder.isEmpty()) {
@@ -83,6 +88,7 @@ fun KanjiCardScreen(language: String, startIndex: Int = 0, shuffled: Boolean = f
     fun move(delta: Int) {
         val next = pos + delta
         if (next in indexOrder.indices) {
+            moveDirection = delta
             pendingFlip = flipped
             flipped = false
             pos = next
@@ -121,20 +127,37 @@ fun KanjiCardScreen(language: String, startIndex: Int = 0, shuffled: Boolean = f
                 },
             contentAlignment = Alignment.Center
         ) {
-            FlipCard(
-                frontWord = frontWord,
-                frontNumber = frontNumber,
-                backWord = backWord,
-                backNumber = backNumber,
-                flipped = flipped,
-                onClick = { flipped = !flipped },
-                onSaveMemo = { memo ->
-                    scope.launch { db.kanjiDao().setMemo(backWord.id, memo) }
+            AnimatedContent(
+                targetState = pos,
+                transitionSpec = {
+                    if (moveDirection > 0) {
+                        slideInHorizontally(tween(300)) { it } togetherWith
+                        slideOutHorizontally(tween(300)) { -it }
+                    } else {
+                        slideInHorizontally(tween(300)) { -it } togetherWith
+                        slideOutHorizontally(tween(300)) { it }
+                    }
                 },
-                onToggleBookmark = {
-                    scope.launch { db.kanjiDao().setBookmarked(frontWord.id, !frontWord.bookmarked) }
-                }
-            )
+                label = "cardSlide",
+                modifier = Modifier.fillMaxSize()
+            ) { currentPos ->
+                val word = baseWords[indexOrder[currentPos]]
+                val number = indexOrder[currentPos] + 1
+                FlipCard(
+                    frontWord = word,
+                    frontNumber = number,
+                    backWord = if (currentPos == pos) backWord else word,
+                    backNumber = if (currentPos == pos) backNumber else number,
+                    flipped = flipped && currentPos == pos,
+                    onClick = { if (currentPos == pos) flipped = !flipped },
+                    onSaveMemo = { memo ->
+                        scope.launch { db.kanjiDao().setMemo(word.id, memo) }
+                    },
+                    onToggleBookmark = {
+                        scope.launch { db.kanjiDao().setBookmarked(word.id, !word.bookmarked) }
+                    }
+                )
+            }
         }
 
         Spacer(Modifier.height(20.dp))
