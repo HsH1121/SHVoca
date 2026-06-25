@@ -130,17 +130,10 @@ fun KanjiCardScreen(language: String, startIndex: Int = 0, shuffled: Boolean = f
                 onClick = { flipped = !flipped },
                 onSaveMemo = { memo ->
                     scope.launch { db.kanjiDao().setMemo(backWord.id, memo) }
-                }
-            )
-
-            BookmarkButton(
-                bookmarked = frontWord.bookmarked,
-                onToggle = {
-                    scope.launch { db.kanjiDao().setBookmarked(frontWord.id, !frontWord.bookmarked) }
                 },
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(16.dp)
+                onToggleBookmark = {
+                    scope.launch { db.kanjiDao().setBookmarked(frontWord.id, !frontWord.bookmarked) }
+                }
             )
         }
 
@@ -257,7 +250,8 @@ private fun FlipCard(
     backNumber: Int,
     flipped: Boolean,
     onClick: () -> Unit,
-    onSaveMemo: (String) -> Unit
+    onSaveMemo: (String) -> Unit,
+    onToggleBookmark: () -> Unit
 ) {
     val rotation by animateFloatAsState(
         targetValue = if (flipped) 180f else 0f,
@@ -302,6 +296,13 @@ private fun FlipCard(
                     .align(Alignment.BottomCenter)
                     .padding(bottom = 18.dp)
             )
+            BookmarkButton(
+                bookmarked = frontWord.bookmarked,
+                onToggle = onToggleBookmark,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(16.dp)
+            )
         } else {
             Box(
                 modifier = Modifier
@@ -319,6 +320,13 @@ private fun FlipCard(
                         .padding(18.dp)
                 )
                 BackFace(backWord, onSaveMemo)
+                BookmarkButton(
+                    bookmarked = backWord.bookmarked,
+                    onToggle = onToggleBookmark,
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(16.dp)
+                )
             }
         }
     }
