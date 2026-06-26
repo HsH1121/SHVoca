@@ -14,6 +14,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.ui.res.painterResource
 import com.baekseok.shvoca.R
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -45,7 +46,8 @@ fun WordListScreen(
     onBack: () -> Unit,
     onWordSelected: (startIndex: Int, wordIds: List<Int>?) -> Unit,
     onShuffle: (wordIds: List<Int>?) -> Unit,
-    onTest: () -> Unit
+    onTest: () -> Unit,
+    onPhotoAdd: () -> Unit = {}
 ) {
     BackHandler { onBack() }
 
@@ -110,6 +112,13 @@ fun WordListScreen(
                         painter = painterResource(R.drawable.ic_edit),
                         contentDescription = "편집 모드",
                         tint = if (editMode) Gold else Ink
+                    )
+                }
+                IconButton(onClick = onPhotoAdd) {
+                    Icon(
+                        imageVector = Icons.Default.CameraAlt,
+                        contentDescription = "사진으로 추가",
+                        tint = Ink
                     )
                 }
                 IconButton(onClick = { showAddDialog = true }) {
