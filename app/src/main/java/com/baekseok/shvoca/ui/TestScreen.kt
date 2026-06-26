@@ -64,8 +64,6 @@ private val WrongRed     = Color(0xFF5C2A2A)
 
 @Composable
 fun TestScreen(language: String, onBack: () -> Unit) {
-    BackHandler { onBack() }
-
     val context  = LocalContext.current
     val scope    = rememberCoroutineScope()
     val db       = remember { KanjiDatabase.getInstance(context.applicationContext) }
@@ -77,6 +75,18 @@ fun TestScreen(language: String, onBack: () -> Unit) {
     var correctCount by remember { mutableStateOf(0) }
     var wrongWords   by remember { mutableStateOf<List<KanjiWord>>(emptyList()) }
     var finished     by remember { mutableStateOf(false) }
+
+    fun resetToModeSelect() {
+        selectedMode = null
+        questions    = emptyList()
+        qIndex       = 0
+        correctCount = 0
+        wrongWords   = emptyList()
+        finished     = false
+    }
+
+    val handleBack = { if (selectedMode != null) resetToModeSelect() else onBack() }
+    BackHandler { handleBack() }
 
     LaunchedEffect(selectedMode, allWords.size) {
         val mode = selectedMode ?: return@LaunchedEffect
@@ -97,7 +107,7 @@ fun TestScreen(language: String, onBack: () -> Unit) {
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            IconButton(onClick = onBack) {
+            IconButton(onClick = { handleBack() }) {
                 Icon(
                     painter = painterResource(R.drawable.ic_chevron_left),
                     contentDescription = "뒤로",
