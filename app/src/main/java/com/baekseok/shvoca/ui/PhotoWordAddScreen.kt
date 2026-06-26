@@ -57,7 +57,7 @@ private fun createImageUri(context: Context): Uri {
 private fun buildRecognizer(languageType: String): TextRecognizer = when (languageType) {
     "일본어" -> TextRecognition.getClient(JapaneseTextRecognizerOptions.Builder().build())
     "중국어", "한자" -> TextRecognition.getClient(ChineseTextRecognizerOptions.Builder().build())
-    else -> TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS) // 영어 (Latin)
+    else -> TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
 }
 
 private suspend fun runOcr(context: Context, uri: Uri, languageType: String): String {
@@ -136,8 +136,9 @@ private suspend fun parseWithGemini(languageType: String, ocrText: String): List
     }
 }
 
+// 상태와 로직을 담은 콘텐츠 — BottomSheet와 전체화면 모두에서 재사용
 @Composable
-fun PhotoWordAddScreen(language: String, onBack: () -> Unit) {
+fun PhotoWordAddContent(language: String, onDismiss: () -> Unit) {
     val context = LocalContext.current
     val scope   = rememberCoroutineScope()
     val db      = remember { KanjiDatabase.getInstance(context.applicationContext) }
@@ -182,71 +183,47 @@ fun PhotoWordAddScreen(language: String, onBack: () -> Unit) {
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Paper)
-            .statusBarsPadding()
-            .padding(horizontal = 20.dp)
-            .padding(top = 32.dp, bottom = 24.dp)
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) {
-                Text("←", color = Ink, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-            }
-            Text(
-                "사진으로 단어 추가",
-                color = Ink, fontSize = 22.sp, fontWeight = FontWeight.ExtraBold,
-                modifier = Modifier.weight(1f)
-            )
-        }
-        Spacer(Modifier.height(24.dp))
-
-        when (phase) {
-            Phase.Pick   -> PickPhase(
-                errorMsg  = errorMsg,
-                onGallery = { errorMsg = null; galleryLauncher.launch("image/*") },
-                onCamera  = { errorMsg = null; cameraPermission.launch(Manifest.permission.CAMERA) }
-            )
-            Phase.Loading -> LoadingPhase()
-            Phase.Review  -> ReviewPhase(
-                languageType = langType,
-                editWords    = editWords,
-                selected     = selected,
-                onWordChange = { idx, t -> editWords = editWords.toMutableList().also { it[idx] = t } },
-                onToggle     = { idx -> selected = selected.toMutableList().also { it[idx] = !it[idx] } },
-                onAdd = {
-                    scope.launch {
-                        val toInsert = editWords.zip(selected)
-                            .filter { (_, sel) -> sel }
-                            .map { (w, _) -> KanjiWord(language = language, kanji = w.first, furigana = w.second, meaning = w.third) }
-                        db.kanjiDao().insertAll(toInsert)
-                        onBack()
-                    }
-                },
-                onBack = { phase = Phase.Pick }
-            )
-        }
+    when (phase) {
+        Phase.Pick    -> PickPhase(
+            errorMsg  = errorMsg,
+            onGallery = { errorMsg = null; galleryLauncher.launch("image/*") },
+            onCamera  = { errorMsg = null; cameraPermission.launch(Manifest.permission.CAMERA) }
+        )
+        Phase.Loading -> LoadingPhase()
+        Phase.Review  -> ReviewPhase(
+            languageType = langType,
+            editWords    = editWords,
+            selected     = selected,
+            onWordChange = { idx, t -> editWords = editWords.toMutableList().also { it[idx] = t } },
+            onToggle     = { idx -> selected = selected.toMutableList().also { it[idx] = !it[idx] } },
+            onAdd = {
+                scope.launch {
+                    val toInsert = editWords.zip(selected)
+                        .filter { (_, sel) -> sel }
+                        .map { (w, _) -> KanjiWord(language = language, kanji = w.first, furigana = w.second, meaning = w.third) }
+                    db.kanjiDao().insertAll(toInsert)
+                    onDismiss()
+                }
+            },
+            onBack = { phase = Phase.Pick }
+        )
     }
 }
 
 @Composable
 private fun PickPhase(errorMsg: String?, onGallery: () -> Unit, onCamera: () -> Unit) {
     Column(
-        modifier = Modifier.fillMaxSize(),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+        modifier = Modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
         if (errorMsg != null) {
-            Text(errorMsg, color = Red, fontSize = 13.sp, modifier = Modifier.padding(bottom = 20.dp))
+            Text(errorMsg, color = Red, fontSize = 13.sp, modifier = Modifier.padding(bottom = 16.dp))
         }
-        Text("단어가 있는 사진을 선택하세요", color = Muted, fontSize = 14.sp)
-        Spacer(Modifier.height(32.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            OutlinedButton(
+            Button(
                 onClick = onGallery,
                 shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = Ink),
+                colors = ButtonDefaults.buttonColors(containerColor = Ink, contentColor = Paper),
                 modifier = Modifier.weight(1f).height(80.dp)
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -255,10 +232,10 @@ private fun PickPhase(errorMsg: String?, onGallery: () -> Unit, onCamera: () -> 
                     Text("갤러리", fontSize = 13.sp)
                 }
             }
-            Button(
+            OutlinedButton(
                 onClick = onCamera,
                 shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Gold, contentColor = Paper),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = Ink),
                 modifier = Modifier.weight(1f).height(80.dp)
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -273,7 +250,10 @@ private fun PickPhase(errorMsg: String?, onGallery: () -> Unit, onCamera: () -> 
 
 @Composable
 private fun LoadingPhase() {
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+    Box(
+        modifier = Modifier.fillMaxWidth().height(180.dp),
+        contentAlignment = Alignment.Center
+    ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             CircularProgressIndicator(color = Gold)
             Spacer(Modifier.height(16.dp))
@@ -300,10 +280,13 @@ private fun ReviewPhase(
         else     -> "단어" to "발음"
     }
 
-    Column(modifier = Modifier.fillMaxSize()) {
+    Column(modifier = Modifier.fillMaxWidth()) {
         Text("${editWords.size}개 단어 인식됨 · ${selectedCount}개 선택", color = Muted, fontSize = 13.sp)
         Spacer(Modifier.height(12.dp))
-        LazyColumn(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        LazyColumn(
+            modifier = Modifier.heightIn(max = 360.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
             itemsIndexed(editWords) { idx, word ->
                 ParsedWordCard(
                     word = word, selected = selected[idx],

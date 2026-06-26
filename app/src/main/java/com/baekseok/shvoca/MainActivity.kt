@@ -11,13 +11,12 @@ import androidx.compose.ui.Modifier
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import com.baekseok.shvoca.ui.KanjiCardScreen
 import com.baekseok.shvoca.ui.LanguageSelectScreen
-import com.baekseok.shvoca.ui.PhotoWordAddScreen
 import com.baekseok.shvoca.ui.TestScreen
 import com.baekseok.shvoca.ui.WordListScreen
 import com.baekseok.shvoca.ui.theme.SHVOCATheme
 import com.baekseok.shvoca.ui.theme.Paper
 
-private enum class Screen { Language, WordList, Cards, Test, PhotoAdd }
+private enum class Screen { Language, WordList, Cards, Test }
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -56,7 +55,6 @@ class MainActivity : ComponentActivity() {
                                 screen         = Screen.Cards
                             },
                             onTest = { screen = Screen.Test },
-                            onPhotoAdd = { screen = Screen.PhotoAdd }
                         )
                         Screen.Cards -> KanjiCardScreen(
                             language   = language,
@@ -66,10 +64,6 @@ class MainActivity : ComponentActivity() {
                             onBack     = { screen = Screen.WordList }
                         )
                         Screen.Test -> TestScreen(
-                            language = language,
-                            onBack   = { screen = Screen.WordList }
-                        )
-                        Screen.PhotoAdd -> PhotoWordAddScreen(
                             language = language,
                             onBack   = { screen = Screen.WordList }
                         )
