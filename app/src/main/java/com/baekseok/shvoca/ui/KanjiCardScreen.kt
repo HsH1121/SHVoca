@@ -7,8 +7,8 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.ui.res.painterResource
+import com.baekseok.shvoca.R
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -210,9 +210,10 @@ private fun Header(language: String, onBack: () -> Unit) {
         ) {
             IconButton(onClick = onBack) {
                 Icon(
-                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    painter = painterResource(R.drawable.ic_chevron_left),
                     contentDescription = "뒤로",
-                    tint = Ink
+                    tint = Ink,
+                    modifier = Modifier.size(26.4.dp)
                 )
             }
             Text(
@@ -223,12 +224,6 @@ private fun Header(language: String, onBack: () -> Unit) {
                 modifier = Modifier.weight(1f)
             )
         }
-        Spacer(Modifier.height(6.dp))
-        Text(
-            "카드를 탭하면 뜻이 나와요.",
-            color = Muted,
-            fontSize = 13.sp
-        )
     }
 }
 

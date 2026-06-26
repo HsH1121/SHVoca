@@ -3,8 +3,8 @@ package com.baekseok.shvoca.ui
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.ui.res.painterResource
+import com.baekseok.shvoca.R
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -99,9 +99,10 @@ fun TestScreen(language: String, onBack: () -> Unit) {
         ) {
             IconButton(onClick = onBack) {
                 Icon(
-                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    painter = painterResource(R.drawable.ic_chevron_left),
                     contentDescription = "뒤로",
-                    tint = Ink
+                    tint = Ink,
+                    modifier = Modifier.size(26.4.dp)
                 )
             }
             Text(
@@ -340,7 +341,10 @@ private fun WriteQuestion(
     var input    by remember { mutableStateOf("") }
     var answered by remember { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
-    val isCorrect = input.trim() == question.word.furigana.trim()
+    val furiganaList = remember(question.word.furigana) {
+        question.word.furigana.split("|").map { it.trim() }.filter { it.isNotEmpty() }
+    }
+    val isCorrect = input.trim() in furiganaList
 
     Column(
         modifier = Modifier
@@ -415,7 +419,7 @@ private fun WriteQuestion(
             ) { Text("확인", fontWeight = FontWeight.Bold) }
         } else {
             Text(
-                if (isCorrect) "정답!" else "오답  ·  정답: ${question.word.furigana}",
+                if (isCorrect) "정답!" else "오답  ·  정답: ${furiganaList.joinToString(" / ")}",
                 color = if (isCorrect) Color(0xFF4CAF50) else Red,
                 fontSize = 14.sp, fontWeight = FontWeight.Bold
             )
@@ -471,8 +475,11 @@ private fun TestResult(
                 ) {
                     Text(word.kanji, color = Ink, fontSize = 18.sp,
                         fontWeight = FontWeight.Bold, modifier = Modifier.width(76.dp))
-                    Text(word.furigana, color = Red, fontSize = 13.sp,
-                        modifier = Modifier.weight(1f))
+                    Text(
+                        word.furigana.split("|").map { it.trim() }.filter { it.isNotEmpty() }.joinToString(" / "),
+                        color = Red, fontSize = 13.sp,
+                        modifier = Modifier.weight(1f)
+                    )
                     Text(word.meaning, color = Muted, fontSize = 13.sp)
                 }
                 HorizontalDivider(color = Line, thickness = 0.5.dp)

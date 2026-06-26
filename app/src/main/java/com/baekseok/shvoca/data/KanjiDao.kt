@@ -29,6 +29,12 @@ abstract class KanjiDao {
     @Query("UPDATE kanji_words SET memo = :memo WHERE id = :id")
     abstract suspend fun setMemo(id: Int, memo: String)
 
+    @Query("UPDATE kanji_words SET kanji = :kanji, furigana = :furigana, meaning = :meaning, variant = :variant WHERE id = :id")
+    abstract suspend fun updateWord(id: Int, kanji: String, furigana: String, meaning: String, variant: String)
+
+    @Query("DELETE FROM kanji_words WHERE id = :id")
+    abstract suspend fun deleteWord(id: Int)
+
     // ── 단어장(VocabBook) ────────────────────────────────────────────────────
 
     @Query("""

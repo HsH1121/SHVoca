@@ -1,4 +1,4 @@
-$SDK      = "C:\Users\CYJ\AppData\Local\Android\Sdk"
+$SDK      = "C:\Users\eju20\AppData\Local\Android\Sdk"
 $EMULATOR = "$SDK\emulator\emulator.exe"
 $ADB      = "$SDK\platform-tools\adb.exe"
 $AVD      = "Galaxy_S25_API35"

@@ -11,7 +11,8 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.ui.res.painterResource
+import com.baekseok.shvoca.R
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -73,6 +74,9 @@ fun WordListScreen(
     }
 
     var showAddDialog by remember { mutableStateOf(false) }
+    var editMode by remember { mutableStateOf(false) }
+    var editTarget by remember { mutableStateOf<KanjiWord?>(null) }
+    var deleteTarget by remember { mutableStateOf<KanjiWord?>(null) }
 
     Column(
         modifier = Modifier
@@ -88,9 +92,10 @@ fun WordListScreen(
         ) {
             IconButton(onClick = onBack) {
                 Icon(
-                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    painter = painterResource(R.drawable.ic_chevron_left),
                     contentDescription = "뒤로",
-                    tint = Ink
+                    tint = Ink,
+                    modifier = Modifier.size(26.4.dp)
                 )
             }
             Text(
@@ -101,6 +106,13 @@ fun WordListScreen(
                 modifier = Modifier.weight(1f)
             )
             if (book != null) {
+                IconButton(onClick = { editMode = !editMode }) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_edit),
+                        contentDescription = "편집 모드",
+                        tint = if (editMode) Gold else Ink
+                    )
+                }
                 IconButton(onClick = { showAddDialog = true }) {
                     Icon(
                         imageVector = Icons.Default.Add,
@@ -193,19 +205,46 @@ fun WordListScreen(
                             ) { revealedIds = revealedIds + word.id }
                             else Modifier
                         )
-                        Text(
-                            if (word.bookmarked) "★" else "☆",
-                            color = if (word.bookmarked) Gold else Muted,
-                            fontSize = 18.sp,
-                            modifier = Modifier
-                                .padding(start = 10.dp)
-                                .clickable(
-                                    interactionSource = remember { MutableInteractionSource() },
-                                    indication = null
-                                ) {
-                                    scope.launch { db.kanjiDao().setBookmarked(word.id, !word.bookmarked) }
-                                }
-                        )
+                        if (editMode) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_edit),
+                                contentDescription = "수정",
+                                tint = Ink,
+                                modifier = Modifier
+                                    .padding(start = 10.dp)
+                                    .size(18.dp)
+                                    .clickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = null
+                                    ) { editTarget = word }
+                            )
+                            Icon(
+                                painter = painterResource(R.drawable.ic_delete),
+                                contentDescription = "삭제",
+                                tint = Red,
+                                modifier = Modifier
+                                    .padding(start = 10.dp)
+                                    .size(18.dp)
+                                    .clickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = null
+                                    ) { deleteTarget = word }
+                            )
+                        } else {
+                            Text(
+                                if (word.bookmarked) "★" else "☆",
+                                color = if (word.bookmarked) Gold else Muted,
+                                fontSize = 18.sp,
+                                modifier = Modifier
+                                    .padding(start = 10.dp)
+                                    .clickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = null
+                                    ) {
+                                        scope.launch { db.kanjiDao().setBookmarked(word.id, !word.bookmarked) }
+                                    }
+                            )
+                        }
                     }
                     if (pos < displayWords.lastIndex) {
                         HorizontalDivider(color = Line, thickness = 0.5.dp)
@@ -230,10 +269,63 @@ fun WordListScreen(
                     shape = RoundedCornerShape(14.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = Gold, contentColor = Paper)
                 ) {
-                    Text("테스트 하기", fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    Text("테스트", fontSize = 14.sp, fontWeight = FontWeight.Bold)
                 }
             }
         }
+    }
+
+    deleteTarget?.let { target ->
+        AlertDialog(
+            onDismissRequest = { deleteTarget = null },
+            containerColor = CardBg,
+            title = {
+                Text("단어 삭제", color = Ink, fontWeight = FontWeight.ExtraBold, fontSize = 17.sp)
+            },
+            text = {
+                Text(
+                    "'${target.kanji}' 단어를 삭제할까요?",
+                    color = Muted,
+                    fontSize = 14.sp
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        scope.launch { db.kanjiDao().deleteWord(target.id) }
+                        deleteTarget = null
+                    },
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Red, contentColor = Paper)
+                ) {
+                    Text("삭제", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { deleteTarget = null }) {
+                    Text("취소", color = Muted)
+                }
+            }
+        )
+    }
+
+    editTarget?.let { target ->
+        AddWordDialog(
+            languageType = book?.languageType ?: "일본어",
+            initialKanji = target.kanji,
+            initialFurigana = target.furigana,
+            initialMeaning = target.meaning,
+            initialVariant = target.variant,
+            title = "단어 수정",
+            confirmLabel = "수정",
+            onDismiss = { editTarget = null },
+            onConfirm = { kanji, furigana, meaning, variant ->
+                scope.launch {
+                    db.kanjiDao().updateWord(target.id, kanji, furigana, meaning, variant)
+                }
+                editTarget = null
+            }
+        )
     }
 
     if (showAddDialog && book != null) {
@@ -258,6 +350,7 @@ fun WordListScreen(
             }
         )
     }
+
 }
 
 @Composable
@@ -288,13 +381,25 @@ private fun FilterTab(label: String, selected: Boolean, onClick: () -> Unit) {
 @Composable
 private fun AddWordDialog(
     languageType: String,
+    initialKanji: String = "",
+    initialFurigana: String = "",
+    initialMeaning: String = "",
+    initialVariant: String = "",
+    title: String = "단어 추가",
+    confirmLabel: String = "추가",
     onDismiss: () -> Unit,
     onConfirm: (kanji: String, furigana: String, meaning: String, variant: String) -> Unit
 ) {
-    var original by remember { mutableStateOf("") }
-    var reading by remember { mutableStateOf("") }
-    var meaning by remember { mutableStateOf("") }
-    var variant by remember { mutableStateOf("") }
+    var original by remember { mutableStateOf(initialKanji) }
+    var readings by remember {
+        mutableStateOf(
+            if (languageType == "일본어")
+                initialFurigana.split("|").map { it.trim() }.filter { it.isNotEmpty() }.ifEmpty { listOf("") }
+            else listOf(initialFurigana)
+        )
+    }
+    var meaning by remember { mutableStateOf(initialMeaning) }
+    var variant by remember { mutableStateOf(initialVariant) }
 
     val originalLabel = if (languageType == "영어") "영어" else "원문"
     val readingLabel = when (languageType) {
@@ -303,9 +408,14 @@ private fun AddWordDialog(
         else -> null
     }
     val showVariant = languageType == "한자"
+    val isJapanese = languageType == "일본어"
 
-    val canSave = original.isNotBlank() && meaning.isNotBlank() &&
-        (readingLabel == null || reading.isNotBlank()) &&
+    val readingValid = when {
+        readingLabel == null -> true
+        isJapanese -> readings.any { it.isNotBlank() }
+        else -> readings.first().isNotBlank()
+    }
+    val canSave = original.isNotBlank() && meaning.isNotBlank() && readingValid &&
         (!showVariant || variant.isNotBlank())
 
     Dialog(onDismissRequest = onDismiss) {
@@ -314,14 +424,67 @@ private fun AddWordDialog(
             colors = CardDefaults.cardColors(containerColor = CardBg)
         ) {
             Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 20.dp)) {
-                Text("단어 추가", color = Ink, fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
+                Text(title, color = Ink, fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
                 Spacer(Modifier.height(20.dp))
 
                 LabeledField(originalLabel, original) { original = it }
 
                 if (readingLabel != null) {
                     Spacer(Modifier.height(14.dp))
-                    LabeledField(readingLabel, reading) { reading = it }
+                    if (isJapanese) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(readingLabel, color = Muted, fontSize = 12.sp, fontWeight = FontWeight.Bold,
+                                modifier = Modifier.weight(1f))
+                            Icon(
+                                imageVector = Icons.Default.Add,
+                                contentDescription = "후리가나 추가",
+                                tint = Ink,
+                                modifier = Modifier
+                                    .size(20.dp)
+                                    .clickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = null
+                                    ) { readings = readings + "" }
+                            )
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        readings.forEachIndexed { i, value ->
+                            if (i > 0) Spacer(Modifier.height(8.dp))
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                OutlinedTextField(
+                                    value = value,
+                                    onValueChange = { new -> readings = readings.toMutableList().also { it[i] = new } },
+                                    singleLine = true,
+                                    placeholder = { Text("입력", color = Muted, fontSize = 14.sp) },
+                                    modifier = Modifier.weight(1f),
+                                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedBorderColor = Gold,
+                                        unfocusedBorderColor = Line,
+                                        focusedTextColor = Ink,
+                                        unfocusedTextColor = Ink,
+                                        cursorColor = Gold,
+                                        focusedContainerColor = Paper,
+                                        unfocusedContainerColor = Paper
+                                    )
+                                )
+                                if (readings.size > 1) {
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(
+                                        "×",
+                                        color = Muted,
+                                        fontSize = 18.sp,
+                                        modifier = Modifier.clickable(
+                                            interactionSource = remember { MutableInteractionSource() },
+                                            indication = null
+                                        ) { readings = readings.toMutableList().also { it.removeAt(i) } }
+                                    )
+                                }
+                            }
+                        }
+                    } else {
+                        LabeledField(readingLabel, readings.first()) { new -> readings = listOf(new) }
+                    }
                 }
 
                 Spacer(Modifier.height(14.dp))
@@ -344,12 +507,15 @@ private fun AddWordDialog(
                     }
                     Spacer(Modifier.width(4.dp))
                     Button(
-                        onClick = { onConfirm(original.trim(), reading.trim(), meaning.trim(), variant.trim()) },
+                        onClick = {
+                            val furigana = readings.map { it.trim() }.filter { it.isNotEmpty() }.joinToString("|")
+                            onConfirm(original.trim(), furigana, meaning.trim(), variant.trim())
+                        },
                         enabled = canSave,
                         shape = RoundedCornerShape(10.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = Ink, contentColor = Paper)
                     ) {
-                        Text("추가", fontWeight = FontWeight.Bold)
+                        Text(confirmLabel, fontWeight = FontWeight.Bold)
                     }
                 }
             }

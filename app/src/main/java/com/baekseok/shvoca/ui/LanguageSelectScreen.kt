@@ -12,6 +12,8 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.*
+import androidx.compose.ui.res.painterResource
+import com.baekseok.shvoca.R
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -63,7 +65,7 @@ fun LanguageSelectScreen(onLanguageSelected: (String) -> Unit) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                "단어장 선택",
+                "단어장",
                 color = Ink,
                 fontSize = 28.sp,
                 fontWeight = FontWeight.ExtraBold,
@@ -155,7 +157,7 @@ private fun BookCard(book: BookSummary, onClick: () -> Unit, onEdit: () -> Unit)
             .border(1.dp, Line, RoundedCornerShape(14.dp))
             .clickable { onClick() }
             .padding(horizontal = 20.dp, vertical = 16.dp),
-        verticalAlignment = Alignment.CenterVertically
+        verticalAlignment = Alignment.Top
     ) {
         Column(modifier = Modifier.weight(1f)) {
             Box(
@@ -173,22 +175,23 @@ private fun BookCard(book: BookSummary, onClick: () -> Unit, onEdit: () -> Unit)
             }
             Spacer(Modifier.height(5.dp))
             Text(book.name, color = Ink, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.height(2.dp))
-            Text("${book.count}단어", color = Muted, fontSize = 13.sp)
         }
 
-        Text(
-            "수정",
-            color = Muted,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Medium,
-            modifier = Modifier
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null
-                ) { onEdit() }
-                .padding(horizontal = 10.dp, vertical = 6.dp)
-        )
+        Column(horizontalAlignment = Alignment.End) {
+            Text("${book.count}단어", color = Muted, fontSize = 13.sp)
+            Spacer(Modifier.height(8.dp))
+            Icon(
+                painter = painterResource(R.drawable.ic_edit),
+                contentDescription = "수정",
+                tint = Muted,
+                modifier = Modifier
+                    .size(18.dp)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null
+                    ) { onEdit() }
+            )
+        }
     }
 }
 
