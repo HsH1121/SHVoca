@@ -262,7 +262,7 @@ fun KanjiCardScreen(language: String, startIndex: Int = 0, shuffled: Boolean = f
             Box(modifier = Modifier.size(70.dp), contentAlignment = Alignment.Center) {
                 Canvas(modifier = Modifier.size(70.dp)) {
                     if (autoPlay) {
-                        val stroke = 5.0.dp.toPx()
+                        val stroke = 3.5.dp.toPx()
                         val inset = stroke / 2
                         rotate(spinAngle - 90f) {
                             drawArc(
