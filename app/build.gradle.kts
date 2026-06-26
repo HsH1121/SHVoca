@@ -15,6 +15,14 @@ android {
         targetSdk = 35
         versionCode = 1
         versionName = "1.0"
+
+        val geminiKey = rootProject.file("local.properties")
+            .takeIf { it.exists() }
+            ?.readLines()
+            ?.firstOrNull { it.startsWith("GEMINI_API_KEY=") }
+            ?.substringAfter("=")
+            ?: ""
+        buildConfigField("String", "GEMINI_API_KEY", "\"$geminiKey\"")
     }
 
     buildTypes {
@@ -39,6 +47,7 @@ android {
 
     buildFeatures {
         compose = true   // Jetpack Compose 활성화
+        buildConfig = true
     }
 }
 
@@ -55,6 +64,7 @@ dependencies {
     implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material3)
     implementation(libs.androidx.material.icons.core)
+    implementation(libs.androidx.material.icons.extended)
 
     // 디버그 빌드에서만 미리보기 도구 포함
     debugImplementation(libs.androidx.ui.tooling)
@@ -62,4 +72,9 @@ dependencies {
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
     ksp(libs.androidx.room.compiler)
+
+    implementation(libs.mlkit.text.recognition.latin)
+    implementation(libs.mlkit.text.recognition.japanese)
+    implementation(libs.mlkit.text.recognition.chinese)
+    implementation(libs.generativeai)
 }
