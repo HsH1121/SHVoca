@@ -62,7 +62,6 @@ fun WordListScreen(
     }
 
     var hideMode by remember { mutableStateOf(HideMode.NONE) }
-    var revealedIds by remember(hideMode) { mutableStateOf(setOf<Int>()) }
 
     LaunchedEffect(book?.hideMode) {
         book?.let { hideMode = parseHideMode(it.hideMode) }
@@ -182,34 +181,21 @@ fun WordListScreen(
                             fontWeight = FontWeight.Medium,
                             modifier = Modifier.width(28.dp)
                         )
-                        val kanjiHidden = hideMode == HideMode.KANJI && word.id !in revealedIds
-                        val meaningHidden = hideMode == HideMode.MEANING && word.id !in revealedIds
+                        val kanjiHidden = hideMode == HideMode.KANJI
+                        val meaningHidden = hideMode == HideMode.MEANING
 
                         Text(
                             if (kanjiHidden) maskOf(word.kanji) else word.kanji,
                             color = if (kanjiHidden) Muted else Ink,
                             fontSize = if (kanjiHidden) 15.sp else 17.sp,
                             fontWeight = FontWeight.Bold,
-                            modifier = Modifier
-                                .weight(1f)
-                                .then(
-                                    if (kanjiHidden) Modifier.clickable(
-                                        interactionSource = remember { MutableInteractionSource() },
-                                        indication = null
-                                    ) { revealedIds = revealedIds + word.id }
-                                    else Modifier
-                                )
+                            modifier = Modifier.weight(1f)
                         )
                         Text(
                             if (meaningHidden) maskOf(word.meaning) else word.meaning,
                             color = Muted,
                             fontSize = if (meaningHidden) 15.sp else 13.sp,
                             fontWeight = if (meaningHidden) FontWeight.Bold else FontWeight.Normal,
-                            modifier = if (meaningHidden) Modifier.clickable(
-                                interactionSource = remember { MutableInteractionSource() },
-                                indication = null
-                            ) { revealedIds = revealedIds + word.id }
-                            else Modifier
                         )
                         if (editMode) {
                             Icon(
