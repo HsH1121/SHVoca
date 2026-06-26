@@ -2,7 +2,6 @@ package com.baekseok.shvoca.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -363,27 +362,14 @@ private fun ProgressBar(current: Int, total: Int) {
         animationSpec = tween(300),
         label = "progress"
     )
-    val breatheDp by rememberInfiniteTransition(label = "breathe").animateFloat(
-        initialValue = 4f, targetValue = 8f,
-        animationSpec = infiniteRepeatable(
-            tween(1200, easing = FastOutSlowInEasing), RepeatMode.Reverse
-        ),
-        label = "breatheDp"
-    )
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Canvas(modifier = Modifier.weight(1f).height(12.dp)) {
-            val barH = breatheDp.dp.toPx()
-            val barY = (size.height - barH) / 2f
-            val r = barH / 2f
-            drawRoundRect(
-                color = Line, topLeft = Offset(0f, barY),
-                size = Size(size.width, barH), cornerRadius = CornerRadius(r)
-            )
+        Canvas(modifier = Modifier.weight(1f).height(6.dp)) {
+            val r = size.height / 2f
+            drawRoundRect(color = Line, size = size, cornerRadius = CornerRadius(r))
             if (fraction > 0f) {
                 drawRoundRect(
                     brush = Brush.horizontalGradient(listOf(Gold, Red), endX = size.width),
-                    topLeft = Offset(0f, barY),
-                    size = Size(size.width * fraction, barH),
+                    size = Size(size.width * fraction, size.height),
                     cornerRadius = CornerRadius(r)
                 )
             }
