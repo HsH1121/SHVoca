@@ -1,7 +1,6 @@
 package com.baekseok.shvoca.ui.theme
 
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 
@@ -15,7 +14,7 @@ fun SHVOCATheme(content: @Composable () -> Unit) {
             onSurface = Ink,
             outline = Line
         ),
-        typography = Typography(),
+        typography = AppTypography,
         content = content
     )
 }

@@ -2,19 +2,26 @@ package com.baekseok.shvoca.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.ui.res.painterResource
 import com.baekseok.shvoca.R
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -30,7 +37,13 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
@@ -66,6 +79,11 @@ fun KanjiCardScreen(language: String, startIndex: Int = 0, shuffled: Boolean = f
     var backPos by remember { mutableStateOf(pos) }
     var pendingFlip by remember { mutableStateOf(false) }
     var moveDirection by remember { mutableStateOf(1) }
+    var autoPlay by remember { mutableStateOf(false) }
+    var intervalIndex by remember { mutableStateOf(3) }
+    var speedIndex by remember { mutableStateOf(1) }
+    val intervalValues = floatArrayOf(0.5f, 1.0f, 1.5f, 2.0f, 2.5f, 3.0f, 3.5f, 4.0f, 4.5f, 5.0f)
+    val speedValues    = floatArrayOf(0.5f, 1.0f, 1.5f, 2.0f, 2.5f, 3.0f, 3.5f, 4.0f, 4.5f, 5.0f)
 
     LaunchedEffect(baseWords.size) {
         if (baseWords.isNotEmpty() && indexOrder.isEmpty()) {
@@ -80,6 +98,23 @@ fun KanjiCardScreen(language: String, startIndex: Int = 0, shuffled: Boolean = f
             pendingFlip = false
         }
         backPos = pos
+    }
+
+    LaunchedEffect(autoPlay, pos, intervalIndex) {
+        if (!autoPlay) return@LaunchedEffect
+        val d = (intervalValues[intervalIndex] * 1000).toLong()
+        delay(d)
+        flipped = true
+        delay(d)
+        if (pos < indexOrder.size - 1) {
+            moveDirection = 1
+            pendingFlip = true
+            flipped = false
+            pos += 1
+        } else {
+            autoPlay = false
+            flipped = false
+        }
     }
 
     if (baseWords.isEmpty() || indexOrder.isEmpty()) return
@@ -105,7 +140,7 @@ fun KanjiCardScreen(language: String, startIndex: Int = 0, shuffled: Boolean = f
             .background(Paper)
             .statusBarsPadding()
             .padding(horizontal = 20.dp)
-            .padding(top = 32.dp, bottom = 28.dp)
+            .padding(top = 32.dp, bottom = 36.dp)
     ) {
         Header(language = language, onBack = onBack)
 
@@ -187,15 +222,96 @@ fun KanjiCardScreen(language: String, startIndex: Int = 0, shuffled: Boolean = f
 
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterHorizontally)
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Chip(label = "셔플") {
-                indexOrder = indexOrder.shuffled()
-                pos = 0; backPos = 0; flipped = false
+            // 간격
+            Row(
+                modifier = Modifier
+                    .weight(1f)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null
+                    ) { intervalIndex = (intervalIndex + 1) % intervalValues.size },
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("간격 ", color = Muted, fontSize = 13.sp)
+                Text(
+                    intervalValues[intervalIndex].let { if (it % 1f == 0f) "${it.toInt()}초" else "${it}초" },
+                    color = Ink, fontSize = 13.sp
+                )
             }
-            Chip(label = "원래순서") {
-                indexOrder = List(baseWords.size) { it }
-                pos = 0; backPos = 0; flipped = false
+
+            // 재생/일시정지 버튼
+            val spinTransition = rememberInfiniteTransition(label = "spin")
+            val spinAngle by spinTransition.animateFloat(
+                initialValue = 0f,
+                targetValue = 360f,
+                animationSpec = infiniteRepeatable(
+                    animation = tween(durationMillis = 1800, easing = LinearEasing),
+                    repeatMode = RepeatMode.Restart
+                ),
+                label = "spinAngle"
+            )
+            Box(modifier = Modifier.size(70.dp), contentAlignment = Alignment.Center) {
+                Canvas(modifier = Modifier.size(70.dp)) {
+                    if (autoPlay) {
+                        val stroke = 3.5.dp.toPx()
+                        val inset = stroke / 2
+                        rotate(spinAngle - 90f) {
+                            drawArc(
+                                brush = Brush.sweepGradient(
+                                    listOf(Color.Transparent, Gold, Red)
+                                ),
+                                startAngle = 0f,
+                                sweepAngle = 300f,
+                                useCenter = false,
+                                style = Stroke(width = stroke, cap = StrokeCap.Round),
+                                topLeft = Offset(inset, inset),
+                                size = Size(size.width - stroke, size.height - stroke)
+                            )
+                        }
+                    }
+                }
+                Box(
+                    modifier = Modifier
+                        .size(56.dp)
+                        .clip(RoundedCornerShape(99.dp))
+                        .background(Ink)
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null
+                        ) {
+                            if (!autoPlay) flipped = false
+                            autoPlay = !autoPlay
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        painter = painterResource(if (autoPlay) R.drawable.ic_pause else R.drawable.ic_play),
+                        contentDescription = if (autoPlay) "일시 정지" else "재생",
+                        tint = Paper,
+                        modifier = Modifier.size(28.dp)
+                    )
+                }
+            }
+
+            // 배율
+            Row(
+                modifier = Modifier
+                    .weight(1f)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null
+                    ) { speedIndex = (speedIndex + 1) % speedValues.size },
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("배율 ", color = Muted, fontSize = 13.sp)
+                Text(
+                    speedValues[speedIndex].let { if (it % 1f == 0f) "x${it.toInt()}" else "x${it}" },
+                    color = Ink, fontSize = 13.sp
+                )
             }
         }
     }
@@ -469,3 +585,4 @@ private fun Chip(label: String, onClick: () -> Unit) {
         Text(label, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
     }
 }
+

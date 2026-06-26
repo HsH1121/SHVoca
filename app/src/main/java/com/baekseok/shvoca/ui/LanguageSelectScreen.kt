@@ -107,7 +107,7 @@ fun LanguageSelectScreen(onLanguageSelected: (String) -> Unit) {
         BookDialog(
             title     = "단어장 추가",
             initName  = "",
-            initLang  = "일본어",
+            initLang  = "영어",
             onDismiss = { showAddDialog = false },
             onConfirm = { name, langType ->
                 scope.launch(Dispatchers.IO) {
