@@ -2,6 +2,7 @@ package com.baekseok.shvoca.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -37,6 +38,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
@@ -265,10 +267,17 @@ fun KanjiCardScreen(language: String, startIndex: Int = 0, shuffled: Boolean = f
                         rotate(spinAngle - 90f) {
                             drawArc(
                                 brush = Brush.sweepGradient(
-                                    listOf(Color.Transparent, Gold, Red)
+                                    colorStops = arrayOf(
+                                        0.00f to Color.Transparent,
+                                        0.30f to Gold.copy(alpha = 0.45f),
+                                        0.68f to Gold,
+                                        0.86f to Red,
+                                        0.93f to Color.White.copy(alpha = 0.92f),
+                                        1.00f to Color.Transparent
+                                    )
                                 ),
                                 startAngle = 0f,
-                                sweepAngle = 300f,
+                                sweepAngle = 320f,
                                 useCenter = false,
                                 style = Stroke(width = stroke, cap = StrokeCap.Round),
                                 topLeft = Offset(inset, inset),
@@ -354,28 +363,33 @@ private fun ProgressBar(current: Int, total: Int) {
         animationSpec = tween(300),
         label = "progress"
     )
+    val breatheDp by rememberInfiniteTransition(label = "breathe").animateFloat(
+        initialValue = 4f, targetValue = 8f,
+        animationSpec = infiniteRepeatable(
+            tween(1200, easing = FastOutSlowInEasing), RepeatMode.Reverse
+        ),
+        label = "breatheDp"
+    )
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Box(
-            modifier = Modifier
-                .weight(1f)
-                .height(6.dp)
-                .clip(RoundedCornerShape(99.dp))
-                .background(Line)
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth(fraction)
-                    .fillMaxHeight()
-                    .background(Brush.horizontalGradient(listOf(Gold, Red)))
+        Canvas(modifier = Modifier.weight(1f).height(12.dp)) {
+            val barH = breatheDp.dp.toPx()
+            val barY = (size.height - barH) / 2f
+            val r = barH / 2f
+            drawRoundRect(
+                color = Line, topLeft = Offset(0f, barY),
+                size = Size(size.width, barH), cornerRadius = CornerRadius(r)
             )
+            if (fraction > 0f) {
+                drawRoundRect(
+                    brush = Brush.horizontalGradient(listOf(Gold, Red), endX = size.width),
+                    topLeft = Offset(0f, barY),
+                    size = Size(size.width * fraction, barH),
+                    cornerRadius = CornerRadius(r)
+                )
+            }
         }
         Spacer(Modifier.width(10.dp))
-        Text(
-            "$current / $total",
-            color = Muted,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Medium
-        )
+        Text("$current / $total", color = Muted, fontSize = 12.sp, fontWeight = FontWeight.Medium)
     }
 }
 
