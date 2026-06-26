@@ -30,6 +30,7 @@ class MainActivity : ComponentActivity() {
                     var language       by remember { mutableStateOf("") }
                     var cardStartIndex by remember { mutableStateOf(0) }
                     var cardShuffled   by remember { mutableStateOf(false) }
+                    var cardWordIds    by remember { mutableStateOf<List<Int>?>(null) }
 
                     when (screen) {
                         Screen.Language -> LanguageSelectScreen(
@@ -41,14 +42,16 @@ class MainActivity : ComponentActivity() {
                         Screen.WordList -> WordListScreen(
                             language = language,
                             onBack = { screen = Screen.Language },
-                            onWordSelected = { index ->
+                            onWordSelected = { index, wordIds ->
                                 cardStartIndex = index
                                 cardShuffled   = false
+                                cardWordIds    = wordIds
                                 screen         = Screen.Cards
                             },
-                            onShuffle = {
+                            onShuffle = { wordIds ->
                                 cardStartIndex = 0
                                 cardShuffled   = true
+                                cardWordIds    = wordIds
                                 screen         = Screen.Cards
                             },
                             onTest = { screen = Screen.Test }
@@ -57,6 +60,7 @@ class MainActivity : ComponentActivity() {
                             language   = language,
                             startIndex = cardStartIndex,
                             shuffled   = cardShuffled,
+                            wordIds    = cardWordIds,
                             onBack     = { screen = Screen.WordList }
                         )
                         Screen.Test -> TestScreen(

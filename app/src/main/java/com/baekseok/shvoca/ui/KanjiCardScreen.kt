@@ -63,13 +63,17 @@ private val indexOrderSaver = Saver<List<Int>, IntArray>(
 )
 
 @Composable
-fun KanjiCardScreen(language: String, startIndex: Int = 0, shuffled: Boolean = false, onBack: () -> Unit) {
+fun KanjiCardScreen(language: String, startIndex: Int = 0, shuffled: Boolean = false, wordIds: List<Int>? = null, onBack: () -> Unit) {
     BackHandler { onBack() }
 
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val db = remember { KanjiDatabase.getInstance(context.applicationContext) }
-    val baseWords by db.kanjiDao().getByLanguage(language).collectAsState(initial = emptyList())
+    val allWords by db.kanjiDao().getByLanguage(language).collectAsState(initial = emptyList())
+    val baseWords = remember(allWords, wordIds) {
+        if (wordIds == null) allWords
+        else wordIds.mapNotNull { id -> allWords.find { it.id == id } }
+    }
 
     var indexOrder by rememberSaveable(stateSaver = indexOrderSaver) {
         mutableStateOf(emptyList<Int>())

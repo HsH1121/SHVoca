@@ -34,7 +34,7 @@ import kotlinx.coroutines.launch
 
 private enum class HideMode { NONE, KANJI, MEANING }
 
-private fun maskOf(text: String): String = "●".repeat(text.length.coerceIn(3, 10))
+private fun maskOf(text: String): String = "●●●"
 
 private fun parseHideMode(value: String): HideMode =
     try { HideMode.valueOf(value) } catch (e: IllegalArgumentException) { HideMode.NONE }
@@ -43,8 +43,8 @@ private fun parseHideMode(value: String): HideMode =
 fun WordListScreen(
     language: String,
     onBack: () -> Unit,
-    onWordSelected: (Int) -> Unit,
-    onShuffle: () -> Unit,
+    onWordSelected: (startIndex: Int, wordIds: List<Int>?) -> Unit,
+    onShuffle: (wordIds: List<Int>?) -> Unit,
     onTest: () -> Unit
 ) {
     BackHandler { onBack() }
@@ -166,7 +166,12 @@ fun WordListScreen(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable { onWordSelected(index) }
+                            .clickable {
+                                onWordSelected(
+                                    pos,
+                                    if (showBookmarkedOnly) displayWords.map { it.value.id } else null
+                                )
+                            }
                             .padding(vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -183,7 +188,7 @@ fun WordListScreen(
                         Text(
                             if (kanjiHidden) maskOf(word.kanji) else word.kanji,
                             color = if (kanjiHidden) Muted else Ink,
-                            fontSize = 17.sp,
+                            fontSize = if (kanjiHidden) 15.sp else 17.sp,
                             fontWeight = FontWeight.Bold,
                             modifier = Modifier
                                 .weight(1f)
@@ -198,7 +203,8 @@ fun WordListScreen(
                         Text(
                             if (meaningHidden) maskOf(word.meaning) else word.meaning,
                             color = Muted,
-                            fontSize = 13.sp,
+                            fontSize = if (meaningHidden) 15.sp else 13.sp,
+                            fontWeight = if (meaningHidden) FontWeight.Bold else FontWeight.Normal,
                             modifier = if (meaningHidden) Modifier.clickable(
                                 interactionSource = remember { MutableInteractionSource() },
                                 indication = null
@@ -256,7 +262,9 @@ fun WordListScreen(
 
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Button(
-                    onClick = onShuffle,
+                    onClick = {
+                        onShuffle(if (showBookmarkedOnly) displayWords.map { it.value.id } else null)
+                    },
                     modifier = Modifier.weight(1f).height(52.dp),
                     shape = RoundedCornerShape(14.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = Ink, contentColor = Paper)
