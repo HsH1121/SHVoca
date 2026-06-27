@@ -263,7 +263,9 @@ fun WordListScreen(
                     Text("셔플 학습하기", fontSize = 14.sp, fontWeight = FontWeight.Bold)
                 }
                 Button(
-                    onClick = onTest,
+                    onClick = {
+                        onTest()
+                    },
                     modifier = Modifier.weight(1f).height(52.dp),
                     shape = RoundedCornerShape(14.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = Gold, contentColor = Paper)
