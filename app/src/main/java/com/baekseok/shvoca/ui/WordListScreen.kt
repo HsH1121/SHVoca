@@ -1,6 +1,9 @@
+@file:OptIn(ExperimentalMaterial3Api::class)
+
 package com.baekseok.shvoca.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -14,6 +17,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.ui.res.painterResource
 import com.baekseok.shvoca.R
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -45,7 +49,7 @@ fun WordListScreen(
     onBack: () -> Unit,
     onWordSelected: (startIndex: Int, wordIds: List<Int>?) -> Unit,
     onShuffle: (wordIds: List<Int>?) -> Unit,
-    onTest: () -> Unit
+    onTest: () -> Unit,
 ) {
     BackHandler { onBack() }
 
@@ -73,6 +77,7 @@ fun WordListScreen(
     }
 
     var showAddDialog by remember { mutableStateOf(false) }
+    var showPhotoSheet by remember { mutableStateOf(false) }
     var editMode by remember { mutableStateOf(false) }
     var editTarget by remember { mutableStateOf<KanjiWord?>(null) }
     var deleteTarget by remember { mutableStateOf<KanjiWord?>(null) }
@@ -122,7 +127,7 @@ fun WordListScreen(
             }
         }
         Spacer(Modifier.height(6.dp))
-        Text("${displayWords.size}개의 단어 존재", color = Muted, fontSize = 13.sp)
+        Text("${displayWords.size} 단어", color = Muted, fontSize = 13.sp)
         Spacer(Modifier.height(14.dp))
 
         if (words.isNotEmpty()) {
@@ -258,7 +263,9 @@ fun WordListScreen(
                     Text("셔플 학습하기", fontSize = 14.sp, fontWeight = FontWeight.Bold)
                 }
                 Button(
-                    onClick = onTest,
+                    onClick = {
+                        onTest()
+                    },
                     modifier = Modifier.weight(1f).height(52.dp),
                     shape = RoundedCornerShape(14.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = Gold, contentColor = Paper)
@@ -326,6 +333,7 @@ fun WordListScreen(
         AddWordDialog(
             languageType = book!!.languageType,
             onDismiss = { showAddDialog = false },
+            onPhotoAdd = { showPhotoSheet = true },
             onConfirm = { kanji, furigana, meaning, variant ->
                 scope.launch {
                     db.kanjiDao().insertAll(
@@ -343,6 +351,33 @@ fun WordListScreen(
                 showAddDialog = false
             }
         )
+    }
+
+    if (showPhotoSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showPhotoSheet = false },
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+            containerColor = Paper
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp)
+                    .padding(bottom = 24.dp)
+            ) {
+                Text(
+                    "사진으로 단어 추가",
+                    color = Ink,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(Modifier.height(24.dp))
+                PhotoWordAddContent(
+                    language = language,
+                    onDismiss = { showPhotoSheet = false }
+                )
+            }
+        }
     }
 
 }
@@ -382,6 +417,7 @@ private fun AddWordDialog(
     title: String = "단어 추가",
     confirmLabel: String = "추가",
     onDismiss: () -> Unit,
+    onPhotoAdd: (() -> Unit)? = null,
     onConfirm: (kanji: String, furigana: String, meaning: String, variant: String) -> Unit
 ) {
     var original by remember { mutableStateOf(initialKanji) }
@@ -495,6 +531,15 @@ private fun AddWordDialog(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    if (onPhotoAdd != null) {
+                        IconButton(onClick = onPhotoAdd) {
+                            Icon(
+                                imageVector = Icons.Default.CameraAlt,
+                                contentDescription = "사진으로 추가",
+                                tint = Muted
+                            )
+                        }
+                    }
                     Spacer(Modifier.weight(1f))
                     TextButton(onClick = onDismiss) {
                         Text("취소", color = Muted)

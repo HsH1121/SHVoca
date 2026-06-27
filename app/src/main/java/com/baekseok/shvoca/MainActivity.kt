@@ -54,7 +54,7 @@ class MainActivity : ComponentActivity() {
                                 cardWordIds    = wordIds
                                 screen         = Screen.Cards
                             },
-                            onTest = { screen = Screen.Test }
+                            onTest = { screen = Screen.Test },
                         )
                         Screen.Cards -> KanjiCardScreen(
                             language   = language,

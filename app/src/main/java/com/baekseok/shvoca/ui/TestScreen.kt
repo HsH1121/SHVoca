@@ -69,6 +69,11 @@ fun TestScreen(language: String, onBack: () -> Unit) {
     val db       = remember { KanjiDatabase.getInstance(context.applicationContext) }
     val allWords by db.kanjiDao().getByLanguage(language).collectAsState(initial = emptyList())
 
+    var bookmarkOnly by remember { mutableStateOf(false) }
+    val testWords = remember(allWords, bookmarkOnly) {
+        if (bookmarkOnly) allWords.filter { it.bookmarked } else allWords
+    }
+
     var selectedMode by remember { mutableStateOf<TestMode?>(null) }
     var questions    by remember { mutableStateOf<List<Question>>(emptyList()) }
     var qIndex       by remember { mutableStateOf(0) }
@@ -88,10 +93,10 @@ fun TestScreen(language: String, onBack: () -> Unit) {
     val handleBack = { if (selectedMode != null) resetToModeSelect() else onBack() }
     BackHandler { handleBack() }
 
-    LaunchedEffect(selectedMode, allWords.size) {
+    LaunchedEffect(selectedMode, testWords.size) {
         val mode = selectedMode ?: return@LaunchedEffect
-        if (allWords.size >= 2 && questions.isEmpty()) {
-            questions = buildQuestions(allWords, mode)
+        if (testWords.size >= 2 && questions.isEmpty()) {
+            questions = buildQuestions(testWords, mode)
         }
     }
 
@@ -123,12 +128,16 @@ fun TestScreen(language: String, onBack: () -> Unit) {
                 modifier = Modifier.weight(1f)
             )
         }
-        Spacer(Modifier.height(20.dp))
+        Spacer(Modifier.height(6.dp))
 
         when {
-            selectedMode == null -> ModeSelector { mode -> selectedMode = mode }
+            selectedMode == null -> ModeSelector(
+                bookmarkOnly = bookmarkOnly,
+                onToggleBookmark = { bookmarkOnly = !bookmarkOnly },
+                onSelect = { mode -> selectedMode = mode }
+            )
 
-            allWords.size < 2 ->
+            testWords.size < 2 ->
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text("단어가 부족합니다.", color = Muted, fontSize = 14.sp)
                 }
@@ -143,7 +152,7 @@ fun TestScreen(language: String, onBack: () -> Unit) {
                 correct    = correctCount,
                 wrongWords = wrongWords,
                 onRetry    = {
-                    questions    = buildQuestions(allWords, selectedMode!!)
+                    questions    = buildQuestions(testWords, selectedMode!!)
                     qIndex       = 0
                     correctCount = 0
                     wrongWords   = emptyList()
@@ -195,12 +204,44 @@ fun TestScreen(language: String, onBack: () -> Unit) {
 // ── 모드 선택 ─────────────────────────────────────────────────────────────────
 
 @Composable
-private fun ModeSelector(onSelect: (TestMode) -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+private fun ModeSelector(
+    bookmarkOnly: Boolean,
+    onToggleBookmark: () -> Unit,
+    onSelect: (TestMode) -> Unit
+) {
+    Column {
         Text("학습 방식을 선택하세요.", color = Muted, fontSize = 13.sp)
-        Spacer(Modifier.height(4.dp))
-        ModeCard("후리가나 쓰기", "한자를 보고 읽는 법을 직접 입력")  { onSelect(TestMode.Write) }
-        ModeCard("뜻 선택하기",  "한자를 보고 뜻을 고르는 6지 선다") { onSelect(TestMode.MC) }
+        Spacer(Modifier.height(14.dp))
+        Row {
+            TestFilterTab("북마크", selected = bookmarkOnly, onClick = onToggleBookmark)
+        }
+        Spacer(Modifier.height(14.dp))
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            ModeCard("후리가나 쓰기", "한자를 보고 읽는 법을 직접 입력")  { onSelect(TestMode.Write) }
+            ModeCard("뜻 선택하기",  "한자를 보고 뜻을 고르는 6지 선다") { onSelect(TestMode.MC) }
+        }
+    }
+}
+
+@Composable
+private fun TestFilterTab(label: String, selected: Boolean, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(99.dp))
+            .background(if (selected) Gold.copy(alpha = 0.18f) else Color.Transparent)
+            .border(1.dp, if (selected) Gold else Line, RoundedCornerShape(99.dp))
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null
+            ) { onClick() }
+            .padding(horizontal = 14.dp, vertical = 7.dp)
+    ) {
+        Text(
+            label,
+            color = if (selected) Gold else Muted,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold
+        )
     }
 }
 
