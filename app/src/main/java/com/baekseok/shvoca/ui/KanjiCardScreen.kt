@@ -426,7 +426,7 @@ private fun FlipCard(
             )
             FrontFace(frontWord.kanji)
             Text(
-                "탭하면 정답",
+                "탭하여 확인",
                 color = Muted,
                 fontSize = 11.sp,
                 modifier = Modifier

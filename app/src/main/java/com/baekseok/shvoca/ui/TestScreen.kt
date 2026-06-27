@@ -130,12 +130,20 @@ fun TestScreen(language: String, onBack: () -> Unit) {
         }
         Spacer(Modifier.height(6.dp))
 
+        if (selectedMode == null) {
+            Text("학습 방식을 선택하세요.", color = Muted, fontSize = 13.sp)
+            Spacer(Modifier.height(14.dp))
+            Row {
+                TestFilterTab("북마크", selected = bookmarkOnly, onClick = { bookmarkOnly = !bookmarkOnly })
+            }
+            Spacer(Modifier.height(14.dp))
+        }
+
         when {
-            selectedMode == null -> ModeSelector(
-                bookmarkOnly = bookmarkOnly,
-                onToggleBookmark = { bookmarkOnly = !bookmarkOnly },
-                onSelect = { mode -> selectedMode = mode }
-            )
+            selectedMode == null -> Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                ModeCard("후리가나 쓰기", "한자를 보고 읽는 법을 직접 입력") { selectedMode = TestMode.Write }
+                ModeCard("뜻 선택하기",  "한자를 보고 뜻을 고르는 6지 선다") { selectedMode = TestMode.MC }
+            }
 
             testWords.size < 2 ->
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -204,32 +212,12 @@ fun TestScreen(language: String, onBack: () -> Unit) {
 // ── 모드 선택 ─────────────────────────────────────────────────────────────────
 
 @Composable
-private fun ModeSelector(
-    bookmarkOnly: Boolean,
-    onToggleBookmark: () -> Unit,
-    onSelect: (TestMode) -> Unit
-) {
-    Column {
-        Text("학습 방식을 선택하세요.", color = Muted, fontSize = 13.sp)
-        Spacer(Modifier.height(14.dp))
-        Row {
-            TestFilterTab("북마크", selected = bookmarkOnly, onClick = onToggleBookmark)
-        }
-        Spacer(Modifier.height(14.dp))
-        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            ModeCard("후리가나 쓰기", "한자를 보고 읽는 법을 직접 입력")  { onSelect(TestMode.Write) }
-            ModeCard("뜻 선택하기",  "한자를 보고 뜻을 고르는 6지 선다") { onSelect(TestMode.MC) }
-        }
-    }
-}
-
-@Composable
 private fun TestFilterTab(label: String, selected: Boolean, onClick: () -> Unit) {
     Box(
         modifier = Modifier
             .clip(RoundedCornerShape(99.dp))
-            .background(if (selected) Gold.copy(alpha = 0.18f) else Color.Transparent)
-            .border(1.dp, if (selected) Gold else Line, RoundedCornerShape(99.dp))
+            .background(if (selected) Ink.copy(alpha = 0.16f) else Color.Transparent)
+            .border(1.dp, if (selected) Ink else Line, RoundedCornerShape(99.dp))
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null
@@ -238,7 +226,7 @@ private fun TestFilterTab(label: String, selected: Boolean, onClick: () -> Unit)
     ) {
         Text(
             label,
-            color = if (selected) Gold else Muted,
+            color = if (selected) Ink else Muted,
             fontSize = 12.sp,
             fontWeight = FontWeight.Bold
         )

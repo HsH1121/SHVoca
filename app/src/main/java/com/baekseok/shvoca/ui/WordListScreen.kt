@@ -131,10 +131,7 @@ fun WordListScreen(
         Spacer(Modifier.height(14.dp))
 
         if (words.isNotEmpty()) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+            Row(modifier = Modifier.fillMaxWidth()) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     FilterTab("전체 보기", selected = hideMode == HideMode.NONE) { selectHideMode(HideMode.NONE) }
                     FilterTab("원문 가리기", selected = hideMode == HideMode.KANJI) { selectHideMode(HideMode.KANJI) }
@@ -147,6 +144,7 @@ fun WordListScreen(
                     fontSize = 26.sp,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier
+                        .align(Alignment.CenterVertically)
                         .clickable(
                             interactionSource = remember { MutableInteractionSource() },
                             indication = null
