@@ -1,7 +1,7 @@
 package com.baekseok.shvoca.ui
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -9,6 +9,9 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.ui.res.painterResource
 import com.baekseok.shvoca.R
 import androidx.compose.foundation.Canvas
@@ -44,11 +47,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.unit.IntOffset
-import kotlin.math.roundToInt
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -70,9 +69,6 @@ fun KanjiCardScreen(language: String, startIndex: Int = 0, shuffled: Boolean = f
 
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val density = LocalDensity.current
-    val configuration = LocalConfiguration.current
-    val screenWidthPx = with(density) { configuration.screenWidthDp.dp.toPx() }
     val db = remember { KanjiDatabase.getInstance(context.applicationContext) }
     val allWords by db.kanjiDao().getByLanguage(language).collectAsState(initial = emptyList())
     val baseWords = remember(allWords, wordIds) {
@@ -85,11 +81,8 @@ fun KanjiCardScreen(language: String, startIndex: Int = 0, shuffled: Boolean = f
     }
     var pos by rememberSaveable { mutableStateOf(startIndex) }
     var flipped by rememberSaveable { mutableStateOf(false) }
-    var cardPos by remember { mutableStateOf(pos) }
-    val cardOffset = remember { Animatable(0f) }
-    var prevCardPos by remember { mutableStateOf(pos) }
-    val prevCardOffset = remember { Animatable(0f) }
-    var showPrev by remember { mutableStateOf(false) }
+    var backPos by remember { mutableStateOf(pos) }
+    var prevFlipped by remember { mutableStateOf(false) }
     var pendingFlip by remember { mutableStateOf(false) }
     var moveDirection by remember { mutableStateOf(1) }
     var autoPlay by remember { mutableStateOf(false) }
@@ -110,15 +103,7 @@ fun KanjiCardScreen(language: String, startIndex: Int = 0, shuffled: Boolean = f
             delay(500L)
             pendingFlip = false
         }
-        val dir = moveDirection
-        prevCardPos = cardPos
-        prevCardOffset.snapTo(0f)
-        showPrev = true
-        cardOffset.snapTo(dir * screenWidthPx)
-        cardPos = pos
-        launch { prevCardOffset.animateTo(-dir * screenWidthPx, tween(300)) }
-        cardOffset.animateTo(0f, tween(300))
-        showPrev = false
+        backPos = pos
     }
 
     LaunchedEffect(autoPlay, pos, intervalIndex) {
@@ -140,11 +125,17 @@ fun KanjiCardScreen(language: String, startIndex: Int = 0, shuffled: Boolean = f
 
     if (baseWords.isEmpty() || indexOrder.isEmpty()) return
 
+    val frontWord = baseWords[indexOrder[pos]]
+    val frontNumber = indexOrder[pos] + 1
+    val backWord = baseWords[indexOrder[backPos]]
+    val backNumber = indexOrder[backPos] + 1
+
     fun move(delta: Int) {
         val next = pos + delta
         if (next in indexOrder.indices) {
             moveDirection = delta
             pendingFlip = flipped
+            prevFlipped = flipped
             flipped = false
             pos = next
         }
@@ -182,40 +173,29 @@ fun KanjiCardScreen(language: String, startIndex: Int = 0, shuffled: Boolean = f
                 },
             contentAlignment = Alignment.Center
         ) {
-            if (showPrev) {
-                val prevWord = baseWords[indexOrder[prevCardPos]]
-                val prevNumber = indexOrder[prevCardPos] + 1
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .offset { IntOffset(prevCardOffset.value.roundToInt(), 0) }
-                ) {
-                    FlipCard(
-                        frontWord = prevWord,
-                        frontNumber = prevNumber,
-                        backWord = prevWord,
-                        backNumber = prevNumber,
-                        flipped = false,
-                        onClick = {},
-                        onSaveMemo = {},
-                        onToggleBookmark = {}
-                    )
-                }
-            }
-            val word = baseWords[indexOrder[cardPos]]
-            val number = indexOrder[cardPos] + 1
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .offset { IntOffset(cardOffset.value.roundToInt(), 0) }
-            ) {
+            AnimatedContent(
+                targetState = pos,
+                transitionSpec = {
+                    if (moveDirection > 0) {
+                        slideInHorizontally(tween(300)) { it } togetherWith
+                        slideOutHorizontally(tween(300)) { -it }
+                    } else {
+                        slideInHorizontally(tween(300)) { -it } togetherWith
+                        slideOutHorizontally(tween(300)) { it }
+                    }
+                },
+                label = "cardSlide",
+                modifier = Modifier.fillMaxSize()
+            ) { currentPos ->
+                val word = baseWords[indexOrder[currentPos]]
+                val number = indexOrder[currentPos] + 1
                 FlipCard(
                     frontWord = word,
                     frontNumber = number,
-                    backWord = word,
-                    backNumber = number,
-                    flipped = flipped,
-                    onClick = { flipped = !flipped },
+                    backWord = if (currentPos == pos) backWord else word,
+                    backNumber = if (currentPos == pos) backNumber else number,
+                    flipped = if (currentPos == pos) flipped else prevFlipped,
+                    onClick = { if (currentPos == pos) flipped = !flipped },
                     onSaveMemo = { memo ->
                         scope.launch { db.kanjiDao().setMemo(word.id, memo) }
                     },
