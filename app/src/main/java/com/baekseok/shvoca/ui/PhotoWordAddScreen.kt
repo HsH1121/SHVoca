@@ -13,7 +13,10 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Photo
 import androidx.compose.material3.*
@@ -77,9 +80,9 @@ private fun buildPrompt(languageType: String, ocrText: String): String = when (l
     "일본어" -> """
         아래는 일본어 교재에서 OCR로 추출한 텍스트입니다.
         단어 목록을 JSON 배열로 파싱하세요. 반드시 JSON 배열만 응답하세요.
-        형식: [{"kanji":"漢字","furigana":"ふりがな","meaning":"한국어 뜻"}]
+        형식: [{"kanji":"漢字","furigana":["ふりがな1","ふりがな2"],"meaning":"한국어 뜻"}]
         - kanji: 원문 단어(한자 또는 가나)
-        - furigana: 히라가나 읽기, 없으면 ""
+        - furigana: 히라가나 읽기 배열(복수 읽기 가능), 없으면 []
         - meaning: 한국어 뜻
         - 단어가 아닌 내용(페이지 번호, 챕터 제목 등) 제외
         텍스트: $ocrText
@@ -125,9 +128,15 @@ private suspend fun parseWithGemini(languageType: String, ocrText: String): List
         val arr = JSONArray(json)
         (0 until arr.length()).map { i ->
             val obj = arr.getJSONObject(i)
+            val furigana = when (val f = obj.opt("furigana")) {
+                is JSONArray -> (0 until f.length())
+                    .mapNotNull { f.optString(it).takeIf { s -> s.isNotBlank() } }
+                    .joinToString("|")
+                else -> obj.optString("furigana")
+            }
             ParsedWord(
                 kanji    = obj.optString("kanji"),
-                furigana = obj.optString("furigana"),
+                furigana = furigana,
                 meaning  = obj.optString("meaning")
             )
         }.filter { it.kanji.isNotBlank() || it.meaning.isNotBlank() }
@@ -289,6 +298,7 @@ private fun ReviewPhase(
         ) {
             itemsIndexed(editWords) { idx, word ->
                 ParsedWordCard(
+                    languageType = languageType,
                     word = word, selected = selected[idx],
                     label1 = label1, label2 = label2,
                     onToggle = { onToggle(idx) },
@@ -316,6 +326,7 @@ private fun ReviewPhase(
 
 @Composable
 private fun ParsedWordCard(
+    languageType: String,
     word: Triple<String, String, String>,
     selected: Boolean,
     label1: String,
@@ -323,6 +334,20 @@ private fun ParsedWordCard(
     onToggle: () -> Unit,
     onChange: (Triple<String, String, String>) -> Unit
 ) {
+    val isJapanese = languageType == "일본어"
+    var readings by remember {
+        mutableStateOf(
+            if (isJapanese)
+                word.second.split("|").map { it.trim() }.filter { it.isNotEmpty() }.ifEmpty { listOf("") }
+            else listOf(word.second)
+        )
+    }
+
+    fun notifyReadings(newReadings: List<String>) {
+        readings = newReadings
+        onChange(word.copy(second = newReadings.map { it.trim() }.filter { it.isNotEmpty() }.joinToString("|")))
+    }
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -338,9 +363,58 @@ private fun ParsedWordCard(
         )
         Spacer(Modifier.width(8.dp))
         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            WordField(label1, word.first)  { onChange(word.copy(first  = it)) }
-            WordField(label2, word.second) { onChange(word.copy(second = it)) }
-            WordField("뜻",   word.third)  { onChange(word.copy(third  = it)) }
+            WordField(label1, word.first) { onChange(word.copy(first = it)) }
+            if (isJapanese) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(label2, color = Muted, fontSize = 11.sp, fontWeight = FontWeight.Bold,
+                        modifier = Modifier.weight(1f))
+                    Icon(
+                        imageVector = Icons.Default.Add,
+                        contentDescription = "후리가나 추가",
+                        tint = Ink,
+                        modifier = Modifier
+                            .size(18.dp)
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null
+                            ) { notifyReadings(readings + "") }
+                    )
+                }
+                readings.forEachIndexed { i, value ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        OutlinedTextField(
+                            value = value,
+                            onValueChange = { new ->
+                                notifyReadings(readings.toMutableList().also { it[i] = new })
+                            },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                            shape = RoundedCornerShape(8.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = Gold, unfocusedBorderColor = Line,
+                                focusedTextColor = Ink, unfocusedTextColor = Ink,
+                                cursorColor = Gold,
+                                focusedContainerColor = Paper, unfocusedContainerColor = Paper
+                            ),
+                            textStyle = LocalTextStyle.current.copy(fontSize = 14.sp),
+                            modifier = Modifier.weight(1f)
+                        )
+                        if (readings.size > 1) {
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                "×", color = Muted, fontSize = 18.sp,
+                                modifier = Modifier.clickable(
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = null
+                                ) { notifyReadings(readings.toMutableList().also { it.removeAt(i) }) }
+                            )
+                        }
+                    }
+                }
+            } else {
+                WordField(label2, word.second) { onChange(word.copy(second = it)) }
+            }
+            WordField("뜻", word.third) { onChange(word.copy(third = it)) }
         }
     }
 }
