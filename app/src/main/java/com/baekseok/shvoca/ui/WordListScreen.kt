@@ -403,7 +403,7 @@ private fun FilterTab(label: String, selected: Boolean, onClick: () -> Unit) {
 }
 
 // ── 단어 추가 다이얼로그 ────────────────────────────────────────────────────────
-// 언어별 입력 항목/순서: 영어(영어·뜻) / 일본어(원문·후리가나·뜻) / 중국어(원문·발음·뜻) / 한자(원문·발음·뜻·간번체)
+// 언어별 입력 항목/순서: 영어(영어·뜻) / 일본어(원문·후리가나·뜻) / 중국어(원문·발음·뜻·간번체) / 한자(원문·발음·뜻·간번체)
 
 @Composable
 private fun AddWordDialog(
@@ -435,7 +435,7 @@ private fun AddWordDialog(
         "중국어", "한자" -> "발음"
         else -> null
     }
-    val showVariant = languageType == "한자"
+    val showVariant = languageType == "한자" || languageType == "중국어"
     val isJapanese = languageType == "일본어"
 
     val readingValid = when {
@@ -443,8 +443,7 @@ private fun AddWordDialog(
         isJapanese -> readings.any { it.isNotBlank() }
         else -> readings.first().isNotBlank()
     }
-    val canSave = original.isNotBlank() && meaning.isNotBlank() && readingValid &&
-        (!showVariant || variant.isNotBlank())
+    val canSave = original.isNotBlank() && meaning.isNotBlank() && readingValid
 
     Dialog(onDismissRequest = onDismiss) {
         Card(
@@ -520,7 +519,26 @@ private fun AddWordDialog(
 
                 if (showVariant) {
                     Spacer(Modifier.height(14.dp))
-                    LabeledField("간체/번체", variant) { variant = it }
+                    Text("간/번체", color = Muted, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(8.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                        listOf("간체", "번체").forEach { label ->
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.clickable(
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = null
+                                ) { variant = if (variant == label) "" else label }
+                            ) {
+                                Checkbox(
+                                    checked = variant == label,
+                                    onCheckedChange = { variant = if (it) label else "" },
+                                    colors = CheckboxDefaults.colors(checkedColor = Gold, uncheckedColor = Muted)
+                                )
+                                Text(label, color = Ink, fontSize = 14.sp)
+                            }
+                        }
+                    }
                 }
 
                 Spacer(Modifier.height(20.dp))

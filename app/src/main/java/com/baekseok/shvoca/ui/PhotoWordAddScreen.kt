@@ -80,40 +80,40 @@ private fun buildPrompt(languageType: String, ocrText: String): String = when (l
     "일본어" -> """
         아래는 일본어 교재에서 OCR로 추출한 텍스트입니다.
         단어 목록을 JSON 배열로 파싱하세요. 반드시 JSON 배열만 응답하세요.
-        형식: [{"kanji":"漢字","furigana":["ふりがな1","ふりがな2"],"meaning":"한국어 뜻"}]
+        형식: [{"kanji":"漢字","furigana":["ふりがな1","ふりがな2"],"meaning":"한국어 뜻1, 뜻2"}]
         - kanji: 원문 단어(한자 또는 가나)
         - furigana: 히라가나 읽기 배열(복수 읽기 가능), 없으면 []
-        - meaning: 한국어 뜻
+        - meaning: 한국어 뜻, 여러 뜻은 쉼표로 구분(예: "가다, 오르다, 나아지다")
         - 단어가 아닌 내용(페이지 번호, 챕터 제목 등) 제외
         텍스트: $ocrText
     """.trimIndent()
     "중국어" -> """
         아래는 중국어 교재에서 OCR로 추출한 텍스트입니다.
         단어 목록을 JSON 배열로 파싱하세요. 반드시 JSON 배열만 응답하세요.
-        형식: [{"kanji":"汉字","furigana":"pīnyīn","meaning":"한국어 뜻"}]
+        형식: [{"kanji":"汉字","furigana":"pīnyīn","meaning":"한국어 뜻1, 뜻2"}]
         - kanji: 중국어 단어(한자)
         - furigana: 병음(pinyin), 없으면 ""
-        - meaning: 한국어 뜻
+        - meaning: 한국어 뜻, 여러 뜻은 쉼표로 구분(예: "가다, 이동하다")
         - 단어가 아닌 내용 제외
         텍스트: $ocrText
     """.trimIndent()
     "한자" -> """
         아래는 한자 교재에서 OCR로 추출한 텍스트입니다.
         한자 목록을 JSON 배열로 파싱하세요. 반드시 JSON 배열만 응답하세요.
-        형식: [{"kanji":"漢字","furigana":"음","meaning":"뜻"}]
+        형식: [{"kanji":"漢字","furigana":"음","meaning":"뜻1, 뜻2"}]
         - kanji: 한자
         - furigana: 한국어 음(독음), 없으면 ""
-        - meaning: 한자의 뜻(훈)
+        - meaning: 한자의 뜻(훈), 여러 훈은 쉼표로 구분(예: "즐거울, 음악, 좋아할")
         - 단어가 아닌 내용 제외
         텍스트: $ocrText
     """.trimIndent()
     else -> """
         아래는 영어 교재에서 OCR로 추출한 텍스트입니다.
         단어 목록을 JSON 배열로 파싱하세요. 반드시 JSON 배열만 응답하세요.
-        형식: [{"kanji":"word","furigana":"pronunciation","meaning":"한국어 뜻"}]
+        형식: [{"kanji":"word","furigana":"pronunciation","meaning":"한국어 뜻1, 뜻2"}]
         - kanji: 영어 단어
         - furigana: 발음기호 또는 발음 표기, 없으면 ""
-        - meaning: 한국어 뜻
+        - meaning: 한국어 뜻, 여러 뜻은 쉼표로 구분(예: "은행, 강둑, 기울다")
         - 단어가 아닌 내용 제외
         텍스트: $ocrText
     """.trimIndent()
