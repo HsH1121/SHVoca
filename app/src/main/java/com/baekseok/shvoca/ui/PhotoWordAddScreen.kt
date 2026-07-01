@@ -25,12 +25,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.FileProvider
 import com.baekseok.shvoca.BuildConfig
+import com.baekseok.shvoca.R
 import com.baekseok.shvoca.data.KanjiDatabase
 import com.baekseok.shvoca.data.KanjiWord
 import com.baekseok.shvoca.ui.theme.*
@@ -50,7 +54,7 @@ import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
 private data class ParsedWord(val kanji: String, val furigana: String, val meaning: String)
-private enum class Phase { Pick, Loading, Review }
+private enum class Phase { Pick, Loading }
 
 private fun createImageUri(context: Context): Uri {
     val dir = File(context.cacheDir, "images").also { it.mkdirs() }
@@ -178,9 +182,13 @@ private suspend fun parseWithGemini(languageType: String, ocrText: String): List
     }
 }
 
-// 상태와 로직을 담은 콘텐츠 — BottomSheet와 전체화면 모두에서 재사용
+// 사진 선택/OCR/Gemini 파싱을 담은 콘텐츠 — BottomSheet에서 사용.
+// 파싱이 끝나면 onParsed로 결과를 넘기고, 실제 단어 조정은 별도의 전체화면(PhotoWordReviewScreen)에서 진행한다.
 @Composable
-fun PhotoWordAddContent(language: String, onDismiss: () -> Unit) {
+fun PhotoWordAddContent(
+    language: String,
+    onParsed: (languageType: String, words: List<Triple<String, String, String>>) -> Unit
+) {
     val context = LocalContext.current
     val scope   = rememberCoroutineScope()
     val db      = remember { KanjiDatabase.getInstance(context.applicationContext) }
@@ -189,8 +197,6 @@ fun PhotoWordAddContent(language: String, onDismiss: () -> Unit) {
 
     var phase       by remember { mutableStateOf<Phase>(Phase.Pick) }
     var cameraUri   by remember { mutableStateOf<Uri?>(null) }
-    var editWords   by remember { mutableStateOf<List<Triple<String, String, String>>>(emptyList()) }
-    var selected    by remember { mutableStateOf<List<Boolean>>(emptyList()) }
     var errorMsg    by remember { mutableStateOf<String?>(null) }
 
     fun processUri(uri: Uri) {
@@ -201,9 +207,7 @@ fun PhotoWordAddContent(language: String, onDismiss: () -> Unit) {
                 if (ocrText.isBlank()) { errorMsg = "텍스트를 인식하지 못했습니다."; phase = Phase.Pick; return@launch }
                 val words = parseWithGemini(langType, ocrText)
                 if (words.isEmpty()) { errorMsg = "단어를 파싱하지 못했습니다."; phase = Phase.Pick; return@launch }
-                editWords = words.map { Triple(it.kanji, it.furigana, it.meaning) }
-                selected  = List(words.size) { true }
-                phase     = Phase.Review
+                onParsed(langType, words.map { Triple(it.kanji, it.furigana, it.meaning) })
             } catch (e: Exception) {
                 errorMsg = e.message ?: "오류가 발생했습니다."
                 phase = Phase.Pick
@@ -232,23 +236,6 @@ fun PhotoWordAddContent(language: String, onDismiss: () -> Unit) {
             onCamera  = { errorMsg = null; cameraPermission.launch(Manifest.permission.CAMERA) }
         )
         Phase.Loading -> LoadingPhase()
-        Phase.Review  -> ReviewPhase(
-            languageType = langType,
-            editWords    = editWords,
-            selected     = selected,
-            onWordChange = { idx, t -> editWords = editWords.toMutableList().also { it[idx] = t } },
-            onToggle     = { idx -> selected = selected.toMutableList().also { it[idx] = !it[idx] } },
-            onAdd = {
-                scope.launch {
-                    val toInsert = editWords.zip(selected)
-                        .filter { (_, sel) -> sel }
-                        .map { (w, _) -> KanjiWord(language = language, kanji = w.first, furigana = w.second, meaning = w.third) }
-                    db.kanjiDao().insertAll(toInsert)
-                    onDismiss()
-                }
-            },
-            onBack = { phase = Phase.Pick }
-        )
     }
 }
 
@@ -304,16 +291,17 @@ private fun LoadingPhase() {
     }
 }
 
+// 파싱된 단어를 확인/수정하는 전체화면 페이지. 개별 단어 추가·삭제가 가능하다.
 @Composable
-private fun ReviewPhase(
+fun PhotoWordReviewScreen(
     languageType: String,
-    editWords: List<Triple<String, String, String>>,
-    selected: List<Boolean>,
-    onWordChange: (Int, Triple<String, String, String>) -> Unit,
-    onToggle: (Int) -> Unit,
-    onAdd: () -> Unit,
-    onBack: () -> Unit
+    initialWords: List<Triple<String, String, String>>,
+    onDismiss: () -> Unit,
+    onAdd: (List<Triple<String, String, String>>) -> Unit
 ) {
+    var editWords by remember { mutableStateOf(initialWords) }
+    var selected  by remember { mutableStateOf(List(initialWords.size) { true }) }
+
     val selectedCount = selected.count { it }
     val (label1, label2) = when (languageType) {
         "일본어" -> "단어" to "후리가나"
@@ -322,37 +310,94 @@ private fun ReviewPhase(
         else     -> "단어" to "발음"
     }
 
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Text("${editWords.size}개 단어 인식됨 · ${selectedCount}개 선택", color = Muted, fontSize = 13.sp)
-        Spacer(Modifier.height(12.dp))
-        LazyColumn(
-            modifier = Modifier.heightIn(max = 360.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+    fun removeWord(idx: Int) {
+        editWords = editWords.toMutableList().also { it.removeAt(idx) }
+        selected  = selected.toMutableList().also { it.removeAt(idx) }
+    }
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Paper)
+                .statusBarsPadding()
+                .padding(top = 32.dp, bottom = 28.dp)
         ) {
-            itemsIndexed(editWords) { idx, word ->
-                ParsedWordCard(
-                    languageType = languageType,
-                    word = word, selected = selected[idx],
-                    label1 = label1, label2 = label2,
-                    onToggle = { onToggle(idx) },
-                    onChange = { onWordChange(idx, it) }
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = onDismiss) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_chevron_left),
+                        contentDescription = "뒤로",
+                        tint = Ink,
+                        modifier = Modifier.size(26.4.dp)
+                    )
+                }
+                Text(
+                    "단어 확인 및 수정",
+                    color = Ink,
+                    fontSize = 28.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    modifier = Modifier.weight(1f)
                 )
             }
-        }
-        Spacer(Modifier.height(12.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            OutlinedButton(
-                onClick = onBack,
-                shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = Ink),
-                modifier = Modifier.weight(1f).height(52.dp)
-            ) { Text("다시 찍기") }
-            Button(
-                onClick = onAdd, enabled = selectedCount > 0,
-                shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Gold, contentColor = Paper),
-                modifier = Modifier.weight(1f).height(52.dp)
-            ) { Text("${selectedCount}개 추가") }
+            Spacer(Modifier.height(6.dp))
+            Text(
+                "${editWords.size}개 단어 인식됨 · ${selectedCount}개 선택",
+                color = Muted, fontSize = 13.sp,
+                modifier = Modifier.padding(horizontal = 20.dp)
+            )
+            Spacer(Modifier.height(14.dp))
+            Column(modifier = Modifier.weight(1f).padding(horizontal = 20.dp)) {
+                LazyColumn(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    itemsIndexed(editWords) { idx, word ->
+                        ParsedWordCard(
+                            languageType = languageType,
+                            word = word, selected = selected[idx],
+                            label1 = label1, label2 = label2,
+                            onToggle = { selected = selected.toMutableList().also { it[idx] = !it[idx] } },
+                            onChange = { t -> editWords = editWords.toMutableList().also { it[idx] = t } },
+                            onDelete = { removeWord(idx) }
+                        )
+                    }
+                }
+                Spacer(Modifier.height(12.dp))
+                OutlinedButton(
+                    onClick = {
+                        editWords = editWords + Triple("", "", "")
+                        selected  = selected + true
+                    },
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Ink),
+                    modifier = Modifier.fillMaxWidth().height(48.dp)
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("단어 추가")
+                }
+                Spacer(Modifier.height(12.dp))
+                Button(
+                    onClick = {
+                        onAdd(
+                            editWords.zip(selected)
+                                .filter { (_, sel) -> sel }
+                                .map { (w, _) -> w }
+                        )
+                    },
+                    enabled = selectedCount > 0,
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Gold, contentColor = Paper),
+                    modifier = Modifier.fillMaxWidth().height(52.dp)
+                ) { Text("${selectedCount}개 추가") }
+            }
         }
     }
 }
@@ -365,7 +410,8 @@ private fun ParsedWordCard(
     label1: String,
     label2: String,
     onToggle: () -> Unit,
-    onChange: (Triple<String, String, String>) -> Unit
+    onChange: (Triple<String, String, String>) -> Unit,
+    onDelete: () -> Unit
 ) {
     val isJapanese = languageType == "일본어"
     var readings by remember {
@@ -449,6 +495,18 @@ private fun ParsedWordCard(
             }
             WordField("뜻", word.third) { onChange(word.copy(third = it)) }
         }
+        Spacer(Modifier.width(8.dp))
+        Icon(
+            painter = painterResource(R.drawable.ic_delete),
+            contentDescription = "단어 삭제",
+            tint = Red,
+            modifier = Modifier
+                .size(18.dp)
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null
+                ) { onDelete() }
+        )
     }
 }
 
