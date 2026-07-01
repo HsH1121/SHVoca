@@ -427,7 +427,12 @@ private fun AddWordDialog(
         )
     }
     var meaning by remember { mutableStateOf(initialMeaning) }
-    var variant by remember { mutableStateOf(initialVariant) }
+    val defaultVariant = when (languageType) {
+        "중국어" -> "간체"
+        "한자" -> "번체"
+        else -> ""
+    }
+    var variant by remember { mutableStateOf(initialVariant.ifBlank { defaultVariant }) }
 
     val originalLabel = if (languageType == "영어") "영어" else "원문"
     val readingLabel = when (languageType) {
@@ -443,7 +448,8 @@ private fun AddWordDialog(
         isJapanese -> readings.any { it.isNotBlank() }
         else -> readings.first().isNotBlank()
     }
-    val canSave = original.isNotBlank() && meaning.isNotBlank() && readingValid
+    val canSave = original.isNotBlank() && meaning.isNotBlank() && readingValid &&
+            (!showVariant || variant.isNotBlank())
 
     Dialog(onDismissRequest = onDismiss) {
         Card(
@@ -528,11 +534,11 @@ private fun AddWordDialog(
                                 modifier = Modifier.clickable(
                                     interactionSource = remember { MutableInteractionSource() },
                                     indication = null
-                                ) { variant = if (variant == label) "" else label }
+                                ) { variant = label }
                             ) {
                                 Checkbox(
                                     checked = variant == label,
-                                    onCheckedChange = { variant = if (it) label else "" },
+                                    onCheckedChange = { checked -> if (checked) variant = label },
                                     colors = CheckboxDefaults.colors(checkedColor = Gold, uncheckedColor = Muted)
                                 )
                                 Text(label, color = Ink, fontSize = 14.sp)
