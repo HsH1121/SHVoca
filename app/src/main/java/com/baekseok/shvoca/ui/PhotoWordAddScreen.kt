@@ -120,7 +120,7 @@ private fun buildPrompt(languageType: String, ocrText: String): String = when (l
 }
 
 private suspend fun parseWithGemini(languageType: String, ocrText: String): List<ParsedWord> {
-    val model = GenerativeModel(modelName = "gemini-2.0-flash", apiKey = BuildConfig.GEMINI_API_KEY)
+    val model = GenerativeModel(modelName = "gemini-2.5-flash", apiKey = BuildConfig.GEMINI_API_KEY)
     val response = model.generateContent(buildPrompt(languageType, ocrText))
     val raw = response.text?.trim() ?: return emptyList()
     val json = raw.removePrefix("```json").removePrefix("```").removeSuffix("```").trim()
