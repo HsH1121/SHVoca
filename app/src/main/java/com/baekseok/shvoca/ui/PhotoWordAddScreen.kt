@@ -431,7 +431,7 @@ private fun ParsedWordCard(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
-            .background(if (selected) Paper else Line.copy(alpha = 0.3f))
+            .background(if (selected) CardBg else Line.copy(alpha = 0.3f))
             .border(1.dp, if (selected) Line else Line.copy(alpha = 0.3f), RoundedCornerShape(12.dp))
             .padding(12.dp),
         verticalAlignment = Alignment.CenterVertically
