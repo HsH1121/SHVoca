@@ -40,6 +40,7 @@ import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.TextRecognizer
 import com.google.mlkit.vision.text.chinese.ChineseTextRecognizerOptions
 import com.google.mlkit.vision.text.japanese.JapaneseTextRecognizerOptions
+import com.google.mlkit.vision.text.korean.KoreanTextRecognizerOptions
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -63,17 +64,24 @@ private fun buildRecognizer(languageType: String): TextRecognizer = when (langua
     else -> TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
 }
 
+private suspend fun recognizeText(recognizer: TextRecognizer, image: InputImage): String =
+    suspendCancellableCoroutine { cont ->
+        recognizer.process(image)
+            .addOnSuccessListener { cont.resume(it.text) }
+            .addOnFailureListener { cont.resumeWithException(it) }
+    }
+
 private suspend fun runOcr(context: Context, uri: Uri, languageType: String): String {
     val stream = context.contentResolver.openInputStream(uri)
     val bitmap = BitmapFactory.decodeStream(stream)
     stream?.close()
     val image = InputImage.fromBitmap(bitmap, 0)
-    val recognizer = buildRecognizer(languageType)
-    return suspendCancellableCoroutine { cont ->
-        recognizer.process(image)
-            .addOnSuccessListener { cont.resume(it.text) }
-            .addOnFailureListener { cont.resumeWithException(it) }
-    }
+
+    // 대상 언어 인식기와 한글 인식기를 각각 돌려서 합친다 —
+    // ML Kit 인식기는 스크립트 하나만 처리하므로, 뜻으로 같이 적혀있는 한글은 별도로 인식해야 함.
+    val mainText = recognizeText(buildRecognizer(languageType), image)
+    val koreanText = recognizeText(TextRecognition.getClient(KoreanTextRecognizerOptions.Builder().build()), image)
+    return listOf(mainText, koreanText).filter { it.isNotBlank() }.joinToString("\n")
 }
 
 private fun buildPrompt(languageType: String, ocrText: String): String = when (languageType) {
@@ -84,6 +92,16 @@ private fun buildPrompt(languageType: String, ocrText: String): String = when (l
         - kanji: 원문 단어(한자 또는 가나)
         - furigana: 히라가나 읽기 배열(복수 읽기 가능), 없으면 []
         - meaning: 한국어 뜻, 여러 뜻은 쉼표로 구분(예: "가다, 오르다, 나아지다")
+        - OCR 특성상 한자/후리가나/뜻 중 일부가 누락되거나 순서가 뒤섞여 있을 수 있습니다.
+          누락된 항목은 네 지식으로 채워 넣고, 순서가 안 맞으면 같은 단어끼리 올바르게 재매칭하세요.
+          - 한자 + 뜻만 있고 후리가나가 없으면: 그 한자의 올바른 히라가나 읽기를 채워 넣으세요.
+            통용되는 읽기가 여러 개면 하나만 고르지 말고 전부 배열에 넣으세요(가장 널리 쓰이는 읽기를 배열 맨 앞에).
+          - 히라가나(가나)만 있고 한자/뜻이 없으면: 문맥상 가장 알맞은 한자 표기와 한국어 뜻을 채워 넣으세요.
+            (해당 단어가 보통 가나로만 표기되는 경우 kanji는 가나 그대로 두세요.)
+          - 한 단어의 여러 후리가나가 텍스트 안에서 다른 단어의 후리가나와 뒤섞여 있거나 순서가 안 맞으면,
+            발음·의미상 맞는 한자 단어를 찾아 정확히 매칭한 뒤 그 단어의 furigana 배열로 묶으세요.
+            엉뚱한 단어의 읽기를 섞어 넣지 마세요.
+          - 뜻만 있고 한자/후리가나가 없는 경우처럼 정보가 너무 부족해 추정이 불가능하면 억지로 지어내지 말고 그 항목은 제외하세요.
         - 단어가 아닌 내용(페이지 번호, 챕터 제목 등) 제외
         텍스트: $ocrText
     """.trimIndent()
@@ -94,6 +112,11 @@ private fun buildPrompt(languageType: String, ocrText: String): String = when (l
         - kanji: 중국어 단어(한자)
         - furigana: 병음(pinyin), 없으면 ""
         - meaning: 한국어 뜻, 여러 뜻은 쉼표로 구분(예: "가다, 이동하다")
+        - OCR 특성상 한자/병음/뜻 중 일부가 누락되거나 순서가 뒤섞여 있을 수 있습니다.
+          누락된 항목은 네 지식으로 채워 넣고, 순서가 안 맞으면 같은 단어끼리 올바르게 재매칭하세요.
+          - 한자 + 뜻만 있고 병음이 없으면: 그 한자의 올바른 병음을 채워 넣으세요.
+          - 병음(또는 뜻)만 있고 한자가 없으면: 문맥상 가장 알맞은 한자 표기를 채워 넣으세요.
+          - 정보가 너무 부족해 추정이 불가능하면 억지로 지어내지 말고 그 항목은 제외하세요.
         - 단어가 아닌 내용 제외
         텍스트: $ocrText
     """.trimIndent()
@@ -104,6 +127,11 @@ private fun buildPrompt(languageType: String, ocrText: String): String = when (l
         - kanji: 한자
         - furigana: 한국어 음(독음), 없으면 ""
         - meaning: 한자의 뜻(훈), 여러 훈은 쉼표로 구분(예: "즐거울, 음악, 좋아할")
+        - OCR 특성상 한자/음/훈 중 일부가 누락되거나 순서가 뒤섞여 있을 수 있습니다.
+          누락된 항목은 네 지식으로 채워 넣고, 순서가 안 맞으면 같은 한자끼리 올바르게 재매칭하세요.
+          - 한자 + 훈(뜻)만 있고 음이 없으면: 그 한자의 올바른 한국어 음을 채워 넣으세요.
+          - 음(또는 훈)만 있고 한자가 없으면: 문맥상 가장 알맞은 한자를 채워 넣으세요.
+          - 정보가 너무 부족해 추정이 불가능하면 억지로 지어내지 말고 그 항목은 제외하세요.
         - 단어가 아닌 내용 제외
         텍스트: $ocrText
     """.trimIndent()
@@ -114,6 +142,11 @@ private fun buildPrompt(languageType: String, ocrText: String): String = when (l
         - kanji: 영어 단어
         - furigana: 발음기호 또는 발음 표기, 없으면 ""
         - meaning: 한국어 뜻, 여러 뜻은 쉼표로 구분(예: "은행, 강둑, 기울다")
+        - OCR 특성상 단어/발음/뜻 중 일부가 누락되거나 순서가 뒤섞여 있을 수 있습니다.
+          누락된 항목은 네 지식으로 채워 넣고, 순서가 안 맞으면 같은 단어끼리 올바르게 재매칭하세요.
+          - 단어 + 뜻만 있고 발음 표기가 없으면: 올바른 발음기호를 채워 넣으세요.
+          - 발음(또는 뜻)만 있고 단어가 없으면: 문맥상 가장 알맞은 단어를 채워 넣으세요.
+          - 정보가 너무 부족해 추정이 불가능하면 억지로 지어내지 말고 그 항목은 제외하세요.
         - 단어가 아닌 내용 제외
         텍스트: $ocrText
     """.trimIndent()
