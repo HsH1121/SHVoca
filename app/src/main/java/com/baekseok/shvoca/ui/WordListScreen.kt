@@ -50,6 +50,7 @@ fun WordListScreen(
     onWordSelected: (startIndex: Int, wordIds: List<Int>?) -> Unit,
     onShuffle: (wordIds: List<Int>?) -> Unit,
     onTest: () -> Unit,
+    onPhotoParsed: (languageType: String, words: List<Triple<String, String, String>>) -> Unit,
 ) {
     BackHandler { onBack() }
 
@@ -81,7 +82,6 @@ fun WordListScreen(
     var editMode by remember { mutableStateOf(false) }
     var editTarget by remember { mutableStateOf<KanjiWord?>(null) }
     var deleteTarget by remember { mutableStateOf<KanjiWord?>(null) }
-    var photoReview by remember { mutableStateOf<Pair<String, List<Triple<String, String, String>>>?>(null) }
 
     Column(
         modifier = Modifier
@@ -375,29 +375,11 @@ fun WordListScreen(
                     language = language,
                     onParsed = { langType, words ->
                         showPhotoSheet = false
-                        photoReview = langType to words
+                        onPhotoParsed(langType, words)
                     }
                 )
             }
         }
-    }
-
-    photoReview?.let { (langType, words) ->
-        PhotoWordReviewScreen(
-            languageType = langType,
-            initialWords = words,
-            onDismiss = { photoReview = null },
-            onAdd = { toInsert ->
-                scope.launch {
-                    db.kanjiDao().insertAll(
-                        toInsert.map {
-                            KanjiWord(language = language, kanji = it.first, furigana = it.second, meaning = it.third)
-                        }
-                    )
-                    photoReview = null
-                }
-            }
-        )
     }
 }
 

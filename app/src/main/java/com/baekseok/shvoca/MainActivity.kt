@@ -11,12 +11,13 @@ import androidx.compose.ui.Modifier
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import com.baekseok.shvoca.ui.KanjiCardScreen
 import com.baekseok.shvoca.ui.LanguageSelectScreen
+import com.baekseok.shvoca.ui.PhotoWordReviewScreen
 import com.baekseok.shvoca.ui.TestScreen
 import com.baekseok.shvoca.ui.WordListScreen
 import com.baekseok.shvoca.ui.theme.SHVOCATheme
 import com.baekseok.shvoca.ui.theme.Paper
 
-private enum class Screen { Language, WordList, Cards, Test }
+private enum class Screen { Language, WordList, Cards, Test, PhotoReview }
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -31,6 +32,8 @@ class MainActivity : ComponentActivity() {
                     var cardStartIndex by remember { mutableStateOf(0) }
                     var cardShuffled   by remember { mutableStateOf(false) }
                     var cardWordIds    by remember { mutableStateOf<List<Int>?>(null) }
+                    var photoLangType  by remember { mutableStateOf("") }
+                    var photoWords     by remember { mutableStateOf<List<Triple<String, String, String>>>(emptyList()) }
 
                     when (screen) {
                         Screen.Language -> LanguageSelectScreen(
@@ -55,6 +58,11 @@ class MainActivity : ComponentActivity() {
                                 screen         = Screen.Cards
                             },
                             onTest = { screen = Screen.Test },
+                            onPhotoParsed = { langType, words ->
+                                photoLangType = langType
+                                photoWords    = words
+                                screen        = Screen.PhotoReview
+                            },
                         )
                         Screen.Cards -> KanjiCardScreen(
                             language   = language,
@@ -66,6 +74,12 @@ class MainActivity : ComponentActivity() {
                         Screen.Test -> TestScreen(
                             language = language,
                             onBack   = { screen = Screen.WordList }
+                        )
+                        Screen.PhotoReview -> PhotoWordReviewScreen(
+                            language     = language,
+                            languageType = photoLangType,
+                            initialWords = photoWords,
+                            onBack       = { screen = Screen.WordList }
                         )
                     }
                 }

@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Context
 import android.graphics.BitmapFactory
 import android.net.Uri
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -30,8 +31,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.FileProvider
 import com.baekseok.shvoca.BuildConfig
 import com.baekseok.shvoca.R
@@ -292,13 +291,20 @@ private fun LoadingPhase() {
 }
 
 // 파싱된 단어를 확인/수정하는 전체화면 페이지. 개별 단어 추가·삭제가 가능하다.
+// 단어장 -> 단어 목록과 동일하게, 단어 목록 위에 뜨는 다이얼로그가 아니라 완전히 독립된 화면으로 동작한다.
 @Composable
 fun PhotoWordReviewScreen(
+    language: String,
     languageType: String,
     initialWords: List<Triple<String, String, String>>,
-    onDismiss: () -> Unit,
-    onAdd: (List<Triple<String, String, String>>) -> Unit
+    onBack: () -> Unit
 ) {
+    BackHandler { onBack() }
+
+    val context = LocalContext.current
+    val scope   = rememberCoroutineScope()
+    val db      = remember { KanjiDatabase.getInstance(context.applicationContext) }
+
     var editWords by remember { mutableStateOf(initialWords) }
     var selected  by remember { mutableStateOf(List(initialWords.size) { true }) }
 
@@ -315,90 +321,85 @@ fun PhotoWordReviewScreen(
         selected  = selected.toMutableList().also { it.removeAt(idx) }
     }
 
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Paper)
+            .statusBarsPadding()
+            .padding(horizontal = 20.dp)
+            .padding(top = 32.dp, bottom = 28.dp)
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Paper)
-                .statusBarsPadding()
-                .padding(top = 32.dp, bottom = 28.dp)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                IconButton(onClick = onDismiss) {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_chevron_left),
-                        contentDescription = "뒤로",
-                        tint = Ink,
-                        modifier = Modifier.size(26.4.dp)
-                    )
-                }
-                Text(
-                    "단어 확인 및 수정",
-                    color = Ink,
-                    fontSize = 28.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    modifier = Modifier.weight(1f)
+            IconButton(onClick = onBack) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_chevron_left),
+                    contentDescription = "뒤로",
+                    tint = Ink,
+                    modifier = Modifier.size(26.4.dp)
                 )
             }
-            Spacer(Modifier.height(6.dp))
             Text(
-                "${editWords.size}개 단어 인식됨 · ${selectedCount}개 선택",
-                color = Muted, fontSize = 13.sp,
-                modifier = Modifier.padding(horizontal = 20.dp)
+                "단어 확인 및 수정",
+                color = Ink,
+                fontSize = 28.sp,
+                fontWeight = FontWeight.ExtraBold,
+                modifier = Modifier.weight(1f)
             )
-            Spacer(Modifier.height(14.dp))
-            Column(modifier = Modifier.weight(1f).padding(horizontal = 20.dp)) {
-                LazyColumn(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    itemsIndexed(editWords) { idx, word ->
-                        ParsedWordCard(
-                            languageType = languageType,
-                            word = word, selected = selected[idx],
-                            label1 = label1, label2 = label2,
-                            onToggle = { selected = selected.toMutableList().also { it[idx] = !it[idx] } },
-                            onChange = { t -> editWords = editWords.toMutableList().also { it[idx] = t } },
-                            onDelete = { removeWord(idx) }
-                        )
-                    }
-                }
-                Spacer(Modifier.height(12.dp))
-                OutlinedButton(
-                    onClick = {
-                        editWords = editWords + Triple("", "", "")
-                        selected  = selected + true
-                    },
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Ink),
-                    modifier = Modifier.fillMaxWidth().height(48.dp)
-                ) {
-                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text("단어 추가")
-                }
-                Spacer(Modifier.height(12.dp))
-                Button(
-                    onClick = {
-                        onAdd(
-                            editWords.zip(selected)
-                                .filter { (_, sel) -> sel }
-                                .map { (w, _) -> w }
-                        )
-                    },
-                    enabled = selectedCount > 0,
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Gold, contentColor = Paper),
-                    modifier = Modifier.fillMaxWidth().height(52.dp)
-                ) { Text("${selectedCount}개 추가") }
+        }
+        Spacer(Modifier.height(6.dp))
+        Text(
+            "${editWords.size}개 단어 인식됨 · ${selectedCount}개 선택",
+            color = Muted, fontSize = 13.sp
+        )
+        Spacer(Modifier.height(14.dp))
+        LazyColumn(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            itemsIndexed(editWords) { idx, word ->
+                ParsedWordCard(
+                    languageType = languageType,
+                    word = word, selected = selected[idx],
+                    label1 = label1, label2 = label2,
+                    onToggle = { selected = selected.toMutableList().also { it[idx] = !it[idx] } },
+                    onChange = { t -> editWords = editWords.toMutableList().also { it[idx] = t } },
+                    onDelete = { removeWord(idx) }
+                )
             }
         }
+        Spacer(Modifier.height(12.dp))
+        OutlinedButton(
+            onClick = {
+                editWords = editWords + Triple("", "", "")
+                selected  = selected + true
+            },
+            shape = RoundedCornerShape(12.dp),
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = Ink),
+            modifier = Modifier.fillMaxWidth().height(48.dp)
+        ) {
+            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(6.dp))
+            Text("단어 추가")
+        }
+        Spacer(Modifier.height(12.dp))
+        Button(
+            onClick = {
+                val toInsert = editWords.zip(selected)
+                    .filter { (_, sel) -> sel }
+                    .map { (w, _) -> KanjiWord(language = language, kanji = w.first, furigana = w.second, meaning = w.third) }
+                scope.launch {
+                    db.kanjiDao().insertAll(toInsert)
+                    onBack()
+                }
+            },
+            enabled = selectedCount > 0,
+            shape = RoundedCornerShape(12.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = Ink, contentColor = Paper),
+            modifier = Modifier.fillMaxWidth().height(52.dp)
+        ) { Text("${selectedCount}개 추가") }
     }
 }
 
@@ -512,19 +513,21 @@ private fun ParsedWordCard(
 
 @Composable
 private fun WordField(label: String, value: String, onChange: (String) -> Unit) {
-    OutlinedTextField(
-        value = value, onValueChange = onChange,
-        label = { Text(label, fontSize = 11.sp) },
-        singleLine = true,
-        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
-        shape = RoundedCornerShape(8.dp),
-        colors = OutlinedTextFieldDefaults.colors(
-            focusedBorderColor = Gold, unfocusedBorderColor = Line,
-            focusedTextColor = Ink, unfocusedTextColor = Ink,
-            cursorColor = Gold,
-            focusedContainerColor = Paper, unfocusedContainerColor = Paper
-        ),
-        textStyle = LocalTextStyle.current.copy(fontSize = 14.sp),
-        modifier = Modifier.fillMaxWidth()
-    )
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(label, color = Muted, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+        OutlinedTextField(
+            value = value, onValueChange = onChange,
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+            shape = RoundedCornerShape(8.dp),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = Gold, unfocusedBorderColor = Line,
+                focusedTextColor = Ink, unfocusedTextColor = Ink,
+                cursorColor = Gold,
+                focusedContainerColor = Paper, unfocusedContainerColor = Paper
+            ),
+            textStyle = LocalTextStyle.current.copy(fontSize = 14.sp),
+            modifier = Modifier.fillMaxWidth()
+        )
+    }
 }
