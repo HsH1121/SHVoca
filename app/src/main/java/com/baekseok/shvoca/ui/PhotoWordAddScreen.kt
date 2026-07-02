@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Context
 import android.graphics.BitmapFactory
 import android.net.Uri
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -13,7 +14,10 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Photo
 import androidx.compose.material3.*
@@ -22,12 +26,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import com.baekseok.shvoca.BuildConfig
+import com.baekseok.shvoca.R
 import com.baekseok.shvoca.data.KanjiDatabase
 import com.baekseok.shvoca.data.KanjiWord
 import com.baekseok.shvoca.ui.theme.*
@@ -37,6 +43,7 @@ import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.TextRecognizer
 import com.google.mlkit.vision.text.chinese.ChineseTextRecognizerOptions
 import com.google.mlkit.vision.text.japanese.JapaneseTextRecognizerOptions
+import com.google.mlkit.vision.text.korean.KoreanTextRecognizerOptions
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -46,7 +53,7 @@ import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
 private data class ParsedWord(val kanji: String, val furigana: String, val meaning: String)
-private enum class Phase { Pick, Loading, Review }
+private enum class Phase { Pick, Loading }
 
 private fun createImageUri(context: Context): Uri {
     val dir = File(context.cacheDir, "images").also { it.mkdirs() }
@@ -60,64 +67,96 @@ private fun buildRecognizer(languageType: String): TextRecognizer = when (langua
     else -> TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
 }
 
+private suspend fun recognizeText(recognizer: TextRecognizer, image: InputImage): String =
+    suspendCancellableCoroutine { cont ->
+        recognizer.process(image)
+            .addOnSuccessListener { cont.resume(it.text) }
+            .addOnFailureListener { cont.resumeWithException(it) }
+    }
+
 private suspend fun runOcr(context: Context, uri: Uri, languageType: String): String {
     val stream = context.contentResolver.openInputStream(uri)
     val bitmap = BitmapFactory.decodeStream(stream)
     stream?.close()
     val image = InputImage.fromBitmap(bitmap, 0)
-    val recognizer = buildRecognizer(languageType)
-    return suspendCancellableCoroutine { cont ->
-        recognizer.process(image)
-            .addOnSuccessListener { cont.resume(it.text) }
-            .addOnFailureListener { cont.resumeWithException(it) }
-    }
+
+    // 대상 언어 인식기와 한글 인식기를 각각 돌려서 합친다 —
+    // ML Kit 인식기는 스크립트 하나만 처리하므로, 뜻으로 같이 적혀있는 한글은 별도로 인식해야 함.
+    val mainText = recognizeText(buildRecognizer(languageType), image)
+    val koreanText = recognizeText(TextRecognition.getClient(KoreanTextRecognizerOptions.Builder().build()), image)
+    return listOf(mainText, koreanText).filter { it.isNotBlank() }.joinToString("\n")
 }
 
 private fun buildPrompt(languageType: String, ocrText: String): String = when (languageType) {
     "일본어" -> """
         아래는 일본어 교재에서 OCR로 추출한 텍스트입니다.
         단어 목록을 JSON 배열로 파싱하세요. 반드시 JSON 배열만 응답하세요.
-        형식: [{"kanji":"漢字","furigana":"ふりがな","meaning":"한국어 뜻"}]
+        형식: [{"kanji":"漢字","furigana":["ふりがな1","ふりがな2"],"meaning":"한국어 뜻1, 뜻2"}]
         - kanji: 원문 단어(한자 또는 가나)
-        - furigana: 히라가나 읽기, 없으면 ""
-        - meaning: 한국어 뜻
+        - furigana: 히라가나 읽기 배열(복수 읽기 가능), 없으면 []
+        - meaning: 한국어 뜻, 여러 뜻은 쉼표로 구분(예: "가다, 오르다, 나아지다")
+        - OCR 특성상 한자/후리가나/뜻 중 일부가 누락되거나 순서가 뒤섞여 있을 수 있습니다.
+          누락된 항목은 네 지식으로 채워 넣고, 순서가 안 맞으면 같은 단어끼리 올바르게 재매칭하세요.
+          - 한자 + 뜻만 있고 후리가나가 없으면: 그 한자의 올바른 히라가나 읽기를 채워 넣으세요.
+            통용되는 읽기가 여러 개면 하나만 고르지 말고 전부 배열에 넣으세요(가장 널리 쓰이는 읽기를 배열 맨 앞에).
+          - 히라가나(가나)만 있고 한자/뜻이 없으면: 문맥상 가장 알맞은 한자 표기와 한국어 뜻을 채워 넣으세요.
+            (해당 단어가 보통 가나로만 표기되는 경우 kanji는 가나 그대로 두세요.)
+          - 한 단어의 여러 후리가나가 텍스트 안에서 다른 단어의 후리가나와 뒤섞여 있거나 순서가 안 맞으면,
+            발음·의미상 맞는 한자 단어를 찾아 정확히 매칭한 뒤 그 단어의 furigana 배열로 묶으세요.
+            엉뚱한 단어의 읽기를 섞어 넣지 마세요.
+          - 뜻만 있고 한자/후리가나가 없는 경우처럼 정보가 너무 부족해 추정이 불가능하면 억지로 지어내지 말고 그 항목은 제외하세요.
         - 단어가 아닌 내용(페이지 번호, 챕터 제목 등) 제외
         텍스트: $ocrText
     """.trimIndent()
     "중국어" -> """
         아래는 중국어 교재에서 OCR로 추출한 텍스트입니다.
         단어 목록을 JSON 배열로 파싱하세요. 반드시 JSON 배열만 응답하세요.
-        형식: [{"kanji":"汉字","furigana":"pīnyīn","meaning":"한국어 뜻"}]
+        형식: [{"kanji":"汉字","furigana":"pīnyīn","meaning":"한국어 뜻1, 뜻2"}]
         - kanji: 중국어 단어(한자)
         - furigana: 병음(pinyin), 없으면 ""
-        - meaning: 한국어 뜻
+        - meaning: 한국어 뜻, 여러 뜻은 쉼표로 구분(예: "가다, 이동하다")
+        - OCR 특성상 한자/병음/뜻 중 일부가 누락되거나 순서가 뒤섞여 있을 수 있습니다.
+          누락된 항목은 네 지식으로 채워 넣고, 순서가 안 맞으면 같은 단어끼리 올바르게 재매칭하세요.
+          - 한자 + 뜻만 있고 병음이 없으면: 그 한자의 올바른 병음을 채워 넣으세요.
+          - 병음(또는 뜻)만 있고 한자가 없으면: 문맥상 가장 알맞은 한자 표기를 채워 넣으세요.
+          - 정보가 너무 부족해 추정이 불가능하면 억지로 지어내지 말고 그 항목은 제외하세요.
         - 단어가 아닌 내용 제외
         텍스트: $ocrText
     """.trimIndent()
     "한자" -> """
         아래는 한자 교재에서 OCR로 추출한 텍스트입니다.
         한자 목록을 JSON 배열로 파싱하세요. 반드시 JSON 배열만 응답하세요.
-        형식: [{"kanji":"漢字","furigana":"음","meaning":"뜻"}]
+        형식: [{"kanji":"漢字","furigana":"음","meaning":"뜻1, 뜻2"}]
         - kanji: 한자
         - furigana: 한국어 음(독음), 없으면 ""
-        - meaning: 한자의 뜻(훈)
+        - meaning: 한자의 뜻(훈), 여러 훈은 쉼표로 구분(예: "즐거울, 음악, 좋아할")
+        - OCR 특성상 한자/음/훈 중 일부가 누락되거나 순서가 뒤섞여 있을 수 있습니다.
+          누락된 항목은 네 지식으로 채워 넣고, 순서가 안 맞으면 같은 한자끼리 올바르게 재매칭하세요.
+          - 한자 + 훈(뜻)만 있고 음이 없으면: 그 한자의 올바른 한국어 음을 채워 넣으세요.
+          - 음(또는 훈)만 있고 한자가 없으면: 문맥상 가장 알맞은 한자를 채워 넣으세요.
+          - 정보가 너무 부족해 추정이 불가능하면 억지로 지어내지 말고 그 항목은 제외하세요.
         - 단어가 아닌 내용 제외
         텍스트: $ocrText
     """.trimIndent()
     else -> """
         아래는 영어 교재에서 OCR로 추출한 텍스트입니다.
         단어 목록을 JSON 배열로 파싱하세요. 반드시 JSON 배열만 응답하세요.
-        형식: [{"kanji":"word","furigana":"pronunciation","meaning":"한국어 뜻"}]
+        형식: [{"kanji":"word","furigana":"pronunciation","meaning":"한국어 뜻1, 뜻2"}]
         - kanji: 영어 단어
         - furigana: 발음기호 또는 발음 표기, 없으면 ""
-        - meaning: 한국어 뜻
+        - meaning: 한국어 뜻, 여러 뜻은 쉼표로 구분(예: "은행, 강둑, 기울다")
+        - OCR 특성상 단어/발음/뜻 중 일부가 누락되거나 순서가 뒤섞여 있을 수 있습니다.
+          누락된 항목은 네 지식으로 채워 넣고, 순서가 안 맞으면 같은 단어끼리 올바르게 재매칭하세요.
+          - 단어 + 뜻만 있고 발음 표기가 없으면: 올바른 발음기호를 채워 넣으세요.
+          - 발음(또는 뜻)만 있고 단어가 없으면: 문맥상 가장 알맞은 단어를 채워 넣으세요.
+          - 정보가 너무 부족해 추정이 불가능하면 억지로 지어내지 말고 그 항목은 제외하세요.
         - 단어가 아닌 내용 제외
         텍스트: $ocrText
     """.trimIndent()
 }
 
 private suspend fun parseWithGemini(languageType: String, ocrText: String): List<ParsedWord> {
-    val model = GenerativeModel(modelName = "gemini-2.0-flash", apiKey = BuildConfig.GEMINI_API_KEY)
+    val model = GenerativeModel(modelName = "gemini-2.5-flash", apiKey = BuildConfig.GEMINI_API_KEY)
     val response = model.generateContent(buildPrompt(languageType, ocrText))
     val raw = response.text?.trim() ?: return emptyList()
     val json = raw.removePrefix("```json").removePrefix("```").removeSuffix("```").trim()
@@ -125,9 +164,15 @@ private suspend fun parseWithGemini(languageType: String, ocrText: String): List
         val arr = JSONArray(json)
         (0 until arr.length()).map { i ->
             val obj = arr.getJSONObject(i)
+            val furigana = when (val f = obj.opt("furigana")) {
+                is JSONArray -> (0 until f.length())
+                    .mapNotNull { f.optString(it).takeIf { s -> s.isNotBlank() } }
+                    .joinToString("|")
+                else -> obj.optString("furigana")
+            }
             ParsedWord(
                 kanji    = obj.optString("kanji"),
-                furigana = obj.optString("furigana"),
+                furigana = furigana,
                 meaning  = obj.optString("meaning")
             )
         }.filter { it.kanji.isNotBlank() || it.meaning.isNotBlank() }
@@ -136,9 +181,13 @@ private suspend fun parseWithGemini(languageType: String, ocrText: String): List
     }
 }
 
-// 상태와 로직을 담은 콘텐츠 — BottomSheet와 전체화면 모두에서 재사용
+// 사진 선택/OCR/Gemini 파싱을 담은 콘텐츠 — BottomSheet에서 사용.
+// 파싱이 끝나면 onParsed로 결과를 넘기고, 실제 단어 조정은 별도의 전체화면(PhotoWordReviewScreen)에서 진행한다.
 @Composable
-fun PhotoWordAddContent(language: String, onDismiss: () -> Unit) {
+fun PhotoWordAddContent(
+    language: String,
+    onParsed: (languageType: String, words: List<Triple<String, String, String>>) -> Unit
+) {
     val context = LocalContext.current
     val scope   = rememberCoroutineScope()
     val db      = remember { KanjiDatabase.getInstance(context.applicationContext) }
@@ -147,8 +196,6 @@ fun PhotoWordAddContent(language: String, onDismiss: () -> Unit) {
 
     var phase       by remember { mutableStateOf<Phase>(Phase.Pick) }
     var cameraUri   by remember { mutableStateOf<Uri?>(null) }
-    var editWords   by remember { mutableStateOf<List<Triple<String, String, String>>>(emptyList()) }
-    var selected    by remember { mutableStateOf<List<Boolean>>(emptyList()) }
     var errorMsg    by remember { mutableStateOf<String?>(null) }
 
     fun processUri(uri: Uri) {
@@ -159,9 +206,7 @@ fun PhotoWordAddContent(language: String, onDismiss: () -> Unit) {
                 if (ocrText.isBlank()) { errorMsg = "텍스트를 인식하지 못했습니다."; phase = Phase.Pick; return@launch }
                 val words = parseWithGemini(langType, ocrText)
                 if (words.isEmpty()) { errorMsg = "단어를 파싱하지 못했습니다."; phase = Phase.Pick; return@launch }
-                editWords = words.map { Triple(it.kanji, it.furigana, it.meaning) }
-                selected  = List(words.size) { true }
-                phase     = Phase.Review
+                onParsed(langType, words.map { Triple(it.kanji, it.furigana, it.meaning) })
             } catch (e: Exception) {
                 errorMsg = e.message ?: "오류가 발생했습니다."
                 phase = Phase.Pick
@@ -190,23 +235,6 @@ fun PhotoWordAddContent(language: String, onDismiss: () -> Unit) {
             onCamera  = { errorMsg = null; cameraPermission.launch(Manifest.permission.CAMERA) }
         )
         Phase.Loading -> LoadingPhase()
-        Phase.Review  -> ReviewPhase(
-            languageType = langType,
-            editWords    = editWords,
-            selected     = selected,
-            onWordChange = { idx, t -> editWords = editWords.toMutableList().also { it[idx] = t } },
-            onToggle     = { idx -> selected = selected.toMutableList().also { it[idx] = !it[idx] } },
-            onAdd = {
-                scope.launch {
-                    val toInsert = editWords.zip(selected)
-                        .filter { (_, sel) -> sel }
-                        .map { (w, _) -> KanjiWord(language = language, kanji = w.first, furigana = w.second, meaning = w.third) }
-                    db.kanjiDao().insertAll(toInsert)
-                    onDismiss()
-                }
-            },
-            onBack = { phase = Phase.Pick }
-        )
     }
 }
 
@@ -262,16 +290,24 @@ private fun LoadingPhase() {
     }
 }
 
+// 파싱된 단어를 확인/수정하는 전체화면 페이지. 상단 '+'로 단어 추가, 카드에서 개별 삭제가 가능하다.
+// 단어장 -> 단어 목록과 동일하게, 단어 목록 위에 뜨는 다이얼로그가 아니라 완전히 독립된 화면으로 동작한다.
 @Composable
-private fun ReviewPhase(
+fun PhotoWordReviewScreen(
+    language: String,
     languageType: String,
-    editWords: List<Triple<String, String, String>>,
-    selected: List<Boolean>,
-    onWordChange: (Int, Triple<String, String, String>) -> Unit,
-    onToggle: (Int) -> Unit,
-    onAdd: () -> Unit,
+    initialWords: List<Triple<String, String, String>>,
     onBack: () -> Unit
 ) {
+    BackHandler { onBack() }
+
+    val context = LocalContext.current
+    val scope   = rememberCoroutineScope()
+    val db      = remember { KanjiDatabase.getInstance(context.applicationContext) }
+
+    var editWords by remember { mutableStateOf(initialWords) }
+    var selected  by remember { mutableStateOf(List(initialWords.size) { true }) }
+
     val selectedCount = selected.count { it }
     val (label1, label2) = when (languageType) {
         "일본어" -> "단어" to "후리가나"
@@ -280,54 +316,119 @@ private fun ReviewPhase(
         else     -> "단어" to "발음"
     }
 
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Text("${editWords.size}개 단어 인식됨 · ${selectedCount}개 선택", color = Muted, fontSize = 13.sp)
-        Spacer(Modifier.height(12.dp))
+    fun removeWord(idx: Int) {
+        editWords = editWords.toMutableList().also { it.removeAt(idx) }
+        selected  = selected.toMutableList().also { it.removeAt(idx) }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Paper)
+            .statusBarsPadding()
+            .padding(horizontal = 20.dp)
+            .padding(top = 32.dp, bottom = 28.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = onBack) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_chevron_left),
+                    contentDescription = "뒤로",
+                    tint = Ink,
+                    modifier = Modifier.size(26.4.dp)
+                )
+            }
+            Text(
+                "단어 확인",
+                color = Ink,
+                fontSize = 28.sp,
+                fontWeight = FontWeight.ExtraBold,
+                modifier = Modifier.weight(1f)
+            )
+            IconButton(onClick = {
+                editWords = editWords + Triple("", "", "")
+                selected  = selected + true
+            }) {
+                Icon(
+                    imageVector = Icons.Default.Add,
+                    contentDescription = "단어 추가",
+                    tint = Ink
+                )
+            }
+        }
+        Spacer(Modifier.height(6.dp))
+        Text(
+            "${editWords.size}개 단어 인식됨 · ${selectedCount}개 선택",
+            color = Muted, fontSize = 13.sp
+        )
+        Spacer(Modifier.height(14.dp))
         LazyColumn(
-            modifier = Modifier.heightIn(max = 360.dp),
+            modifier = Modifier.weight(1f),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             itemsIndexed(editWords) { idx, word ->
                 ParsedWordCard(
+                    languageType = languageType,
                     word = word, selected = selected[idx],
                     label1 = label1, label2 = label2,
-                    onToggle = { onToggle(idx) },
-                    onChange = { onWordChange(idx, it) }
+                    onToggle = { selected = selected.toMutableList().also { it[idx] = !it[idx] } },
+                    onChange = { t -> editWords = editWords.toMutableList().also { it[idx] = t } },
+                    onDelete = { removeWord(idx) }
                 )
             }
         }
         Spacer(Modifier.height(12.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            OutlinedButton(
-                onClick = onBack,
-                shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = Ink),
-                modifier = Modifier.weight(1f).height(52.dp)
-            ) { Text("다시 찍기") }
-            Button(
-                onClick = onAdd, enabled = selectedCount > 0,
-                shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Gold, contentColor = Paper),
-                modifier = Modifier.weight(1f).height(52.dp)
-            ) { Text("${selectedCount}개 추가") }
-        }
+        Button(
+            onClick = {
+                val toInsert = editWords.zip(selected)
+                    .filter { (_, sel) -> sel }
+                    .map { (w, _) -> KanjiWord(language = language, kanji = w.first, furigana = w.second, meaning = w.third) }
+                scope.launch {
+                    db.kanjiDao().insertAll(toInsert)
+                    onBack()
+                }
+            },
+            enabled = selectedCount > 0,
+            shape = RoundedCornerShape(12.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = Ink, contentColor = Paper),
+            modifier = Modifier.fillMaxWidth().height(52.dp)
+        ) { Text("${selectedCount}개 추가") }
     }
 }
 
 @Composable
 private fun ParsedWordCard(
+    languageType: String,
     word: Triple<String, String, String>,
     selected: Boolean,
     label1: String,
     label2: String,
     onToggle: () -> Unit,
-    onChange: (Triple<String, String, String>) -> Unit
+    onChange: (Triple<String, String, String>) -> Unit,
+    onDelete: () -> Unit
 ) {
+    val isJapanese = languageType == "일본어"
+    var readings by remember {
+        mutableStateOf(
+            if (isJapanese)
+                word.second.split("|").map { it.trim() }.filter { it.isNotEmpty() }.ifEmpty { listOf("") }
+            else listOf(word.second)
+        )
+    }
+
+    fun notifyReadings(newReadings: List<String>) {
+        readings = newReadings
+        onChange(word.copy(second = newReadings.map { it.trim() }.filter { it.isNotEmpty() }.joinToString("|")))
+    }
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
-            .background(if (selected) Paper else Line.copy(alpha = 0.3f))
+            .background(if (selected) CardBg else Line.copy(alpha = 0.3f))
             .border(1.dp, if (selected) Line else Line.copy(alpha = 0.3f), RoundedCornerShape(12.dp))
             .padding(12.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -338,28 +439,91 @@ private fun ParsedWordCard(
         )
         Spacer(Modifier.width(8.dp))
         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            WordField(label1, word.first)  { onChange(word.copy(first  = it)) }
-            WordField(label2, word.second) { onChange(word.copy(second = it)) }
-            WordField("뜻",   word.third)  { onChange(word.copy(third  = it)) }
+            WordField(label1, word.first) { onChange(word.copy(first = it)) }
+            if (isJapanese) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(label2, color = Muted, fontSize = 11.sp, fontWeight = FontWeight.Bold,
+                        modifier = Modifier.weight(1f))
+                    Icon(
+                        imageVector = Icons.Default.Add,
+                        contentDescription = "후리가나 추가",
+                        tint = Ink,
+                        modifier = Modifier
+                            .size(18.dp)
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null
+                            ) { notifyReadings(readings + "") }
+                    )
+                }
+                readings.forEachIndexed { i, value ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        OutlinedTextField(
+                            value = value,
+                            onValueChange = { new ->
+                                notifyReadings(readings.toMutableList().also { it[i] = new })
+                            },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                            shape = RoundedCornerShape(8.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = Gold, unfocusedBorderColor = Line,
+                                focusedTextColor = Ink, unfocusedTextColor = Ink,
+                                cursorColor = Gold,
+                                focusedContainerColor = Paper, unfocusedContainerColor = Paper
+                            ),
+                            textStyle = LocalTextStyle.current.copy(fontSize = 14.sp),
+                            modifier = Modifier.weight(1f)
+                        )
+                        if (readings.size > 1) {
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                "×", color = Muted, fontSize = 18.sp,
+                                modifier = Modifier.clickable(
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = null
+                                ) { notifyReadings(readings.toMutableList().also { it.removeAt(i) }) }
+                            )
+                        }
+                    }
+                }
+            } else {
+                WordField(label2, word.second) { onChange(word.copy(second = it)) }
+            }
+            WordField("뜻", word.third) { onChange(word.copy(third = it)) }
         }
+        Spacer(Modifier.width(8.dp))
+        Icon(
+            painter = painterResource(R.drawable.ic_delete),
+            contentDescription = "단어 삭제",
+            tint = Red,
+            modifier = Modifier
+                .size(18.dp)
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null
+                ) { onDelete() }
+        )
     }
 }
 
 @Composable
 private fun WordField(label: String, value: String, onChange: (String) -> Unit) {
-    OutlinedTextField(
-        value = value, onValueChange = onChange,
-        label = { Text(label, fontSize = 11.sp) },
-        singleLine = true,
-        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
-        shape = RoundedCornerShape(8.dp),
-        colors = OutlinedTextFieldDefaults.colors(
-            focusedBorderColor = Gold, unfocusedBorderColor = Line,
-            focusedTextColor = Ink, unfocusedTextColor = Ink,
-            cursorColor = Gold,
-            focusedContainerColor = Paper, unfocusedContainerColor = Paper
-        ),
-        textStyle = LocalTextStyle.current.copy(fontSize = 14.sp),
-        modifier = Modifier.fillMaxWidth()
-    )
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(label, color = Muted, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+        OutlinedTextField(
+            value = value, onValueChange = onChange,
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+            shape = RoundedCornerShape(8.dp),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = Gold, unfocusedBorderColor = Line,
+                focusedTextColor = Ink, unfocusedTextColor = Ink,
+                cursorColor = Gold,
+                focusedContainerColor = Paper, unfocusedContainerColor = Paper
+            ),
+            textStyle = LocalTextStyle.current.copy(fontSize = 14.sp),
+            modifier = Modifier.fillMaxWidth()
+        )
+    }
 }

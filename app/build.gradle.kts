@@ -76,5 +76,6 @@ dependencies {
     implementation(libs.mlkit.text.recognition.latin)
     implementation(libs.mlkit.text.recognition.japanese)
     implementation(libs.mlkit.text.recognition.chinese)
+    implementation(libs.mlkit.text.recognition.korean)
     implementation(libs.generativeai)
 }

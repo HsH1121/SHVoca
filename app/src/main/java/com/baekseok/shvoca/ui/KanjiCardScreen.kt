@@ -82,6 +82,7 @@ fun KanjiCardScreen(language: String, startIndex: Int = 0, shuffled: Boolean = f
     var pos by rememberSaveable { mutableStateOf(startIndex) }
     var flipped by rememberSaveable { mutableStateOf(false) }
     var backPos by remember { mutableStateOf(pos) }
+    var prevFlipped by remember { mutableStateOf(false) }
     var pendingFlip by remember { mutableStateOf(false) }
     var moveDirection by remember { mutableStateOf(1) }
     var autoPlay by remember { mutableStateOf(false) }
@@ -134,6 +135,7 @@ fun KanjiCardScreen(language: String, startIndex: Int = 0, shuffled: Boolean = f
         if (next in indexOrder.indices) {
             moveDirection = delta
             pendingFlip = flipped
+            prevFlipped = flipped
             flipped = false
             pos = next
         }
@@ -144,13 +146,16 @@ fun KanjiCardScreen(language: String, startIndex: Int = 0, shuffled: Boolean = f
             .fillMaxSize()
             .background(Paper)
             .statusBarsPadding()
-            .padding(horizontal = 20.dp)
             .padding(top = 32.dp, bottom = 36.dp)
     ) {
-        Header(language = language, onBack = onBack)
+        Box(modifier = Modifier.padding(horizontal = 20.dp)) {
+            Header(language = language, onBack = onBack)
+        }
 
         Spacer(Modifier.height(18.dp))
-        ProgressBar(current = pos + 1, total = indexOrder.size)
+        Box(modifier = Modifier.padding(horizontal = 20.dp)) {
+            ProgressBar(current = pos + 1, total = indexOrder.size)
+        }
 
         Spacer(Modifier.height(20.dp))
 
@@ -187,12 +192,12 @@ fun KanjiCardScreen(language: String, startIndex: Int = 0, shuffled: Boolean = f
             ) { currentPos ->
                 val word = baseWords[indexOrder[currentPos]]
                 val number = indexOrder[currentPos] + 1
-                FlipCard(
+                Box(modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp)) { FlipCard(
                     frontWord = word,
                     frontNumber = number,
                     backWord = if (currentPos == pos) backWord else word,
                     backNumber = if (currentPos == pos) backNumber else number,
-                    flipped = flipped && currentPos == pos,
+                    flipped = if (currentPos == pos) flipped else prevFlipped,
                     onClick = { if (currentPos == pos) flipped = !flipped },
                     onSaveMemo = { memo ->
                         scope.launch { db.kanjiDao().setMemo(word.id, memo) }
@@ -200,13 +205,16 @@ fun KanjiCardScreen(language: String, startIndex: Int = 0, shuffled: Boolean = f
                     onToggleBookmark = {
                         scope.launch { db.kanjiDao().setBookmarked(word.id, !word.bookmarked) }
                     }
-                )
+                ) }
             }
         }
 
         Spacer(Modifier.height(20.dp))
 
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            modifier = Modifier.padding(horizontal = 20.dp)
+        ) {
             OutlinedButton(
                 onClick = { move(-1) },
                 enabled = pos > 0,
@@ -226,7 +234,9 @@ fun KanjiCardScreen(language: String, startIndex: Int = 0, shuffled: Boolean = f
         Spacer(Modifier.height(12.dp))
 
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             // 간격
@@ -589,4 +599,3 @@ private fun Chip(label: String, onClick: () -> Unit) {
         Text(label, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
     }
 }
-
