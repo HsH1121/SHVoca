@@ -7,6 +7,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -88,8 +89,10 @@ fun LanguageSelectScreen(onLanguageSelected: (String) -> Unit) {
                 Text("단어장이 없습니다", color = Muted, fontSize = 14.sp)
             }
         } else {
+            val listState = rememberLazyListState()
             LazyColumn(
-                modifier = Modifier.weight(1f),
+                state = listState,
+                modifier = Modifier.weight(1f).verticalScrollbar(listState),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 items(books) { book ->

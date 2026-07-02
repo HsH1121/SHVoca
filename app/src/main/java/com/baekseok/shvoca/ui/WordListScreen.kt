@@ -11,6 +11,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -164,7 +165,11 @@ fun WordListScreen(
                 Text("북마크한 단어가 없어요.", color = Muted, fontSize = 14.sp)
             }
         } else {
-            LazyColumn(modifier = Modifier.weight(1f)) {
+            val listState = rememberLazyListState()
+            LazyColumn(
+                state = listState,
+                modifier = Modifier.weight(1f).verticalScrollbar(listState)
+            ) {
                 itemsIndexed(displayWords) { pos, (index, word) ->
                     Row(
                         modifier = Modifier
