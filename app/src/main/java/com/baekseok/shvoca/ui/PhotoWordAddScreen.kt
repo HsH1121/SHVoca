@@ -290,7 +290,7 @@ private fun LoadingPhase() {
     }
 }
 
-// 파싱된 단어를 확인/수정하는 전체화면 페이지. 개별 단어 추가·삭제가 가능하다.
+// 파싱된 단어를 확인/수정하는 전체화면 페이지. 상단 '+'로 단어 추가, 카드에서 개별 삭제가 가능하다.
 // 단어장 -> 단어 목록과 동일하게, 단어 목록 위에 뜨는 다이얼로그가 아니라 완전히 독립된 화면으로 동작한다.
 @Composable
 fun PhotoWordReviewScreen(
@@ -342,12 +342,22 @@ fun PhotoWordReviewScreen(
                 )
             }
             Text(
-                "단어 확인 및 수정",
+                "단어 확인",
                 color = Ink,
                 fontSize = 28.sp,
                 fontWeight = FontWeight.ExtraBold,
                 modifier = Modifier.weight(1f)
             )
+            IconButton(onClick = {
+                editWords = editWords + Triple("", "", "")
+                selected  = selected + true
+            }) {
+                Icon(
+                    imageVector = Icons.Default.Add,
+                    contentDescription = "단어 추가",
+                    tint = Ink
+                )
+            }
         }
         Spacer(Modifier.height(6.dp))
         Text(
@@ -369,20 +379,6 @@ fun PhotoWordReviewScreen(
                     onDelete = { removeWord(idx) }
                 )
             }
-        }
-        Spacer(Modifier.height(12.dp))
-        OutlinedButton(
-            onClick = {
-                editWords = editWords + Triple("", "", "")
-                selected  = selected + true
-            },
-            shape = RoundedCornerShape(12.dp),
-            colors = ButtonDefaults.outlinedButtonColors(contentColor = Ink),
-            modifier = Modifier.fillMaxWidth().height(48.dp)
-        ) {
-            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-            Spacer(Modifier.width(6.dp))
-            Text("단어 추가")
         }
         Spacer(Modifier.height(12.dp))
         Button(
